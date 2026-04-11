@@ -47,34 +47,85 @@ def _normalize_video_url(video_url):
     return normalized
 
 
-def _coerce_non_negative_int(value, field_name, *, minimum=0):
-    if not isinstance(value, int):
-        raise ValueError(f"{field_name} must be an integer")
-
-    if value < minimum:
-        comparator = f">= {minimum}"
-        raise ValueError(f"{field_name} must be {comparator}")
+def _coerce_prompt_scalar(value):
+    if isinstance(value, (list, tuple)) and len(value) == 1:
+        return value[0]
 
     return value
 
 
+def _coerce_non_negative_int(value, field_name, *, minimum=0):
+    value = _coerce_prompt_scalar(value)
+
+    if isinstance(value, bool):
+        raise ValueError(f"{field_name} must be an integer")
+
+    if isinstance(value, int):
+        coerced = value
+    elif isinstance(value, float):
+        if not value.is_integer():
+            raise ValueError(f"{field_name} must be an integer")
+        coerced = int(value)
+    elif isinstance(value, str):
+        normalized = value.strip()
+        if not normalized:
+            raise ValueError(f"{field_name} must be an integer")
+
+        try:
+            if any(character in normalized.lower() for character in (".", "e")):
+                parsed = float(normalized)
+                if not parsed.is_integer():
+                    raise ValueError
+                coerced = int(parsed)
+            else:
+                coerced = int(normalized, 10)
+        except ValueError as exc:
+            raise ValueError(f"{field_name} must be an integer") from exc
+    else:
+        raise ValueError(f"{field_name} must be an integer")
+
+    if coerced < minimum:
+        comparator = f">= {minimum}"
+        raise ValueError(f"{field_name} must be {comparator}")
+
+    return coerced
+
+
 def _coerce_non_negative_number(value, field_name):
-    if not isinstance(value, (int, float)):
+    value = _coerce_prompt_scalar(value)
+
+    if isinstance(value, bool):
         raise ValueError(f"{field_name} must be a number")
 
-    if value < 0:
+    if isinstance(value, (int, float)):
+        coerced = float(value)
+    elif isinstance(value, str):
+        normalized = value.strip()
+        if not normalized:
+            raise ValueError(f"{field_name} must be a number")
+
+        try:
+            coerced = float(normalized)
+        except ValueError as exc:
+            raise ValueError(f"{field_name} must be a number") from exc
+    else:
+        raise ValueError(f"{field_name} must be a number")
+
+    if coerced < 0:
         raise ValueError(f"{field_name} must be >= 0")
 
-    return float(value)
+    return coerced
 
 
-def _validate_video_controls(force_rate, custom_width, custom_height, frame_load_cap, skip_first_frames, select_every_nth):
-    _coerce_non_negative_number(force_rate, "force_rate")
-    _coerce_non_negative_int(custom_width, "custom_width")
-    _coerce_non_negative_int(custom_height, "custom_height")
-    _coerce_non_negative_int(frame_load_cap, "frame_load_cap")
-    _coerce_non_negative_int(skip_first_frames, "skip_first_frames")
-    _coerce_non_negative_int(select_every_nth, "select_every_nth", minimum=1)
+def _coerce_video_controls(force_rate, custom_width, custom_height, frame_load_cap, skip_first_frames, select_every_nth):
+    return (
+        _coerce_non_negative_number(force_rate, "force_rate"),
+        _coerce_non_negative_int(custom_width, "custom_width"),
+        _coerce_non_negative_int(custom_height, "custom_height"),
+        _coerce_non_negative_int(frame_load_cap, "frame_load_cap"),
+        _coerce_non_negative_int(skip_first_frames, "skip_first_frames"),
+        _coerce_non_negative_int(select_every_nth, "select_every_nth", minimum=1),
+    )
 
 
 def _get_cache_directory():
@@ -281,7 +332,7 @@ class LoadVideoURL:
         **kwargs,
     ):
         normalized_url = _normalize_video_url(video_url)
-        _validate_video_controls(
+        force_rate, custom_width, custom_height, frame_load_cap, skip_first_frames, select_every_nth = _coerce_video_controls(
             force_rate,
             custom_width,
             custom_height,
@@ -315,16 +366,26 @@ class LoadVideoURL:
             return video_url
 
     @classmethod
-    def VALIDATE_INPUTS(cls, video_url, **kwargs):
+    def VALIDATE_INPUTS(
+        cls,
+        video_url,
+        force_rate=0,
+        custom_width=0,
+        custom_height=0,
+        frame_load_cap=0,
+        skip_first_frames=0,
+        select_every_nth=1,
+        **kwargs,
+    ):
         try:
-            normalized_url = _normalize_video_url(video_url)
-            _validate_video_controls(
-                kwargs.get("force_rate", 0),
-                kwargs.get("custom_width", 0),
-                kwargs.get("custom_height", 0),
-                kwargs.get("frame_load_cap", 0),
-                kwargs.get("skip_first_frames", 0),
-                kwargs.get("select_every_nth", 1),
+            _normalize_video_url(video_url)
+            _coerce_video_controls(
+                force_rate,
+                custom_width,
+                custom_height,
+                frame_load_cap,
+                skip_first_frames,
+                select_every_nth,
             )
         except ValueError as exc:
             return str(exc)

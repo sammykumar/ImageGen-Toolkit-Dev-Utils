@@ -26,6 +26,9 @@ Users can point the node at a remote asset directly, which reduces friction for 
 - [ ] The node returns a baseline-compatible video frame output for downstream nodes.
 - [ ] Invalid or unreachable URLs fail with clear error messages.
 - [ ] The node does not import or require VideoHelperSuite at runtime.
+- [ ] Prompt validation accepts ComfyUI raw control values without collapsing errors onto `frame_load_cap`.
+- [ ] `video_url` rejects non-string values with a URL-specific validation message.
+- [ ] `0` retains VHS-style meaning for video-native defaults instead of being treated as an invalid override.
 
 ### Scope
 
@@ -170,6 +173,16 @@ interface ExampleNodeInput {
   video_url?: string;
 }
 ```
+
+### Validation Semantics Addendum
+
+- `video_url` must validate as a string input before URL normalization.
+- Numeric controls must tolerate the raw scalar shapes ComfyUI sends during prompt validation, then coerce or reject each field independently with the correct field name.
+- `force_rate = 0` means use the source video FPS.
+- `custom_width = 0` and `custom_height = 0` mean preserve source dimensions unless the paired dimension requests aspect-ratio-derived resizing.
+- `frame_load_cap = 0` means no explicit cap, matching the current video-driven behavior.
+- `skip_first_frames = 0` remains a valid no-skip default.
+- `select_every_nth = 1` remains the baseline "load every frame" value; `0` is not introduced there because it would create an invalid sampling step.
 
 ### API Endpoints
 

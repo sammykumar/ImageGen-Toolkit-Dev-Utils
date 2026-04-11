@@ -199,6 +199,21 @@ This best matches the requested behavior, removes the failing dependency edge, a
 
 ---
 
+## 8A. Validation Follow-up Addendum
+
+### Observed Runtime Regression
+
+- Live ComfyUI prompt validation reports `frame_load_cap must be an integer` against every input on `load-video-url`, which indicates the custom validation path is not matching the actual raw prompt value shape reaching the node.
+- The user also wants the node to explicitly enforce that `video_url` is a string.
+- The user wants VHS-style `0` semantics preserved where `0` means "use the value from the video file itself" rather than forcing an override.
+
+### Local Hypothesis
+
+- `VALIDATE_INPUTS` is too strict about exact Python runtime types for ComfyUI prompt values and is likely validating a shared raw input shape rather than already-coerced Python ints.
+- The cheapest discriminating check is the focused backend unit suite extended with raw string-valued prompt inputs and explicit `0` sentinel expectations.
+
+---
+
 ## 9. References
 
 ### Internal Documentation

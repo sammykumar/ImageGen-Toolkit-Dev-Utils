@@ -315,14 +315,40 @@ Use `VHS_LoadVideo` as a behavioral baseline only. Recreate the required load co
 
 ---
 
+#### Task 11: Fix input validation coercion and VHS zero semantics
+
+**Goal**: Make `Load Video URL` accept ComfyUI prompt values without misreporting every field as `frame_load_cap`, ensure `video_url` is validated as a string explicitly, and mirror the VHS-style `0` sentinel behavior for video-native defaults.
+
+**Files**:
+
+- `load_video_url_node.py` (modify)
+- `tests/test_load_video_url_node.py` (modify)
+- `README.md` (modify if input semantics need clarification)
+
+**Steps**:
+
+1. Fix the custom validation path so each control validates its own value and error message instead of collapsing through a single strict integer failure.
+2. Accept the raw ComfyUI prompt value shapes that reach `VALIDATE_INPUTS`, while still rejecting invalid `video_url` and non-numeric control values clearly.
+3. Replicate VHS-style `0` behavior for controls that mean "use the value from the video file itself," without breaking existing frame-selection behavior.
+
+**Verification**:
+
+- [x] Focused backend tests cover string/int coercion in `VALIDATE_INPUTS`
+- [x] Focused backend tests cover `video_url` type rejection with a URL-specific message
+- [x] Focused backend tests cover `0` sentinel behavior for `force_rate`, `custom_width`, `custom_height`, and `frame_load_cap`
+
+**Status**: ✅ Complete
+
+---
+
 ### Task Summary
 
 | Status         | Count | Tasks     |
 | -------------- | ----- | --------- |
-| ✅ Complete    | 8     | Tasks 0-7 |
+| ✅ Complete    | 9     | Tasks 0-7, 11 |
 | 🔄 In Progress | 3     | Tasks 8-10 |
 | ⬜ Not Started | 0     | -         |
-| **Total**      | **11** | -         |
+| **Total**      | **12** | -         |
 
 ---
 
@@ -351,6 +377,8 @@ Use `VHS_LoadVideo` as a behavioral baseline only. Recreate the required load co
 | 2026-04-11 | Input Preview Implementation | ✅ PASS | Added a `load-video-url` frontend extension with DOM video preview synced from the `video_url` widget |
 | 2026-04-11 | Input Preview Validation | ✅ PASS | Frontend build passed and static validation confirmed preview is callback-driven rather than execution-driven |
 | 2026-04-11 | Live Preview Investigation | ✅ PASS | Runtime inspection showed the node exists but the package frontend extension is not loaded or registered in ComfyUI |
+| 2026-04-11 | Validation Contract Regression | ✅ PASS | Fixed raw prompt-value coercion, restored field-specific validation messages, and preserved VHS-style zero semantics |
+| 2026-04-11 | Validation Contract Retest | ✅ PASS | Focused backend suite passed with added regression coverage for non-collapsed field errors |
 
 ---
 

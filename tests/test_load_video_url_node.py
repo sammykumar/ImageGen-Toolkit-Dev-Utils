@@ -47,6 +47,65 @@ class LoadVideoURLNodeTests(unittest.TestCase):
             "select_every_nth must be >= 1",
         )
 
+    def test_validate_inputs_accepts_raw_prompt_scalars_and_zero_sentinels(self):
+        self.assertTrue(
+            module.LoadVideoURL.VALIDATE_INPUTS(
+                " https://example.com/video.mp4 ",
+                force_rate="0",
+                custom_width="0",
+                custom_height=0,
+                frame_load_cap="0",
+                skip_first_frames="0",
+                select_every_nth="1",
+            )
+        )
+
+    def test_validate_inputs_rejects_non_string_video_url(self):
+        self.assertEqual(
+            module.LoadVideoURL.VALIDATE_INPUTS(
+                42,
+                force_rate="0",
+                custom_width="0",
+                custom_height="0",
+                frame_load_cap="0",
+                skip_first_frames="0",
+                select_every_nth="1",
+            ),
+            "video_url must be a string",
+        )
+
+    def test_validate_inputs_reports_field_specific_integer_errors(self):
+        self.assertEqual(
+            module.LoadVideoURL.VALIDATE_INPUTS(
+                "https://example.com/video.mp4",
+                frame_load_cap="abc",
+            ),
+            "frame_load_cap must be an integer",
+        )
+
+    def test_validate_inputs_reports_non_frame_field_specific_errors(self):
+        self.assertEqual(
+            module.LoadVideoURL.VALIDATE_INPUTS(
+                "https://example.com/video.mp4",
+                custom_width="abc",
+            ),
+            "custom_width must be an integer",
+        )
+        self.assertEqual(
+            module.LoadVideoURL.VALIDATE_INPUTS(
+                "https://example.com/video.mp4",
+                skip_first_frames="abc",
+            ),
+            "skip_first_frames must be an integer",
+        )
+        self.assertEqual(
+            module.LoadVideoURL.VALIDATE_INPUTS(
+                "https://example.com/video.mp4",
+                select_every_nth="abc",
+            ),
+            "select_every_nth must be an integer",
+        )
+
     def test_load_video_downloads_and_decodes_with_internal_helpers(self):
         node = module.LoadVideoURL()
         cached_path = pathlib.Path("/tmp/downloaded-video.mp4")
@@ -84,6 +143,36 @@ class LoadVideoURLNodeTests(unittest.TestCase):
         get_existing_mock.assert_called_once_with("https://example.com/video.mp4")
         download_mock.assert_not_called()
         decode_mock.assert_called_once()
+
+    def test_load_video_coerces_prompt_scalars_before_decode(self):
+        node = module.LoadVideoURL()
+        cached_path = pathlib.Path("/tmp/cached-video.mp4")
+        decoded = ("image", 4, None, {"loaded_frame_count": 4})
+
+        with mock.patch.object(module, "_get_existing_cached_video_path", return_value=cached_path), mock.patch.object(
+            module, "_download_video_to_cache"
+        ) as download_mock, mock.patch.object(module, "_decode_video_file", return_value=decoded) as decode_mock:
+            result = node.load_video(
+                "https://example.com/video.mp4",
+                force_rate="0",
+                custom_width="0",
+                custom_height="0",
+                frame_load_cap="0",
+                skip_first_frames="0",
+                select_every_nth="2",
+            )
+
+        self.assertEqual(result, decoded)
+        download_mock.assert_not_called()
+        decode_mock.assert_called_once_with(
+            cached_path,
+            force_rate=0.0,
+            custom_width=0,
+            custom_height=0,
+            frame_load_cap=0,
+            skip_first_frames=0,
+            select_every_nth=2,
+        )
 
     def test_input_types_rename_video_to_video_url(self):
         input_types = module.LoadVideoURL.INPUT_TYPES()
