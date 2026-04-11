@@ -1,25 +1,17 @@
 # ImageGen Toolkit Dev Utils
 (Important: Make sure to install this latest version of ComfyUI Frontend - **1.24.4**!!!)
 
-A demonstration custom node that showcases how to integrate Vue as a frontend framework within ComfyUI, complete with PrimeVue components and vue-i18n support.
+A focused ComfyUI custom node pack that provides a VideoHelperSuite-compatible remote video URL loader.
 
 ## Overview
 
-ImageGen Toolkit Dev Utils provides a working example of how to build interactive UI components for ComfyUI custom nodes using modern web technologies. It features a basic drawing board inside a custom node that outputs the created image as a result.
-![image1](doc/img.png)
-
-## Technologies
-
-- **[Vue.js](https://vuejs.org/)** - Progressive JavaScript framework for building user interfaces
-- **[PrimeVue](https://primevue.org/)** - Rich UI component library for Vue
-- **[vue-i18n](https://vue-i18n.intlify.dev/)** - Internationalization plugin for Vue.js
+ImageGen Toolkit Dev Utils currently ships a single backend node, `Load Video URL`, which accepts a remote `http` or `https` video URL and delegates decoding to comfyui-videohelpersuite's non-ffmpeg `VHS_LoadVideo` path loader behavior.
 
 ## Features
 
-- Interactive drawing board within a custom node
-- Modern UI components with PrimeVue
-- Multi-language support via vue-i18n
-- Integration with ComfyUI's API system
+- `Load Video URL`, a small adapter node that reuses comfyui-videohelpersuite `VHS_LoadVideo` path-loading behavior for remote `http` and `https` video URLs
+- Clear validation for blank or non-HTTP(S) inputs before delegation
+- Package entrypoint exports only the supported node mappings
 
 ## Installation
 
@@ -30,8 +22,14 @@ This demonstration node is not designed to be installed directly via **git clone
 - ComfyUI Manager
 - ComfyUI Registry
 
+### Additional dependency for `Load Video URL`
+
+The new `Load Video URL` node intentionally targets parity with comfyui-videohelpersuite `VHS_LoadVideo` and delegates to VideoHelperSuite's non-ffmpeg path loader.
+
+Install comfyui-videohelpersuite alongside this package if you want to use that node. If VideoHelperSuite is missing, `Load Video URL` will raise a clear runtime error instead of silently falling back to a different decoder path.
+
 ## Development Setup
-If you want to learn how to develop this custom node or modify it, you can set up a local development environment. Follow these steps:
+If you want to modify this custom node locally, use the following setup:
 1. Clone the repository in your ComfyUI custom nodes directory:
    ```bash
    git clone https://github.com/sammykumar/ImageGen-Toolkit-Dev-Utils
@@ -53,18 +51,16 @@ If you want to learn how to develop this custom node or modify it, you can set u
 
 After installation:
 
-1. Add the "vue-basic" node under examples to your workflow
-2. Use the drawing interface to create your image
-3. Connect the output to compatible nodes (Preview Image, for example) that accept image inputs
-4. Run your workflow to process the drawn image
+1. Add the "Load Video URL" node under `video`
+2. Paste a direct `http` or `https` video URL into the `video_url` field
+3. Adjust `force_rate`, `frame_load_cap`, `skip_first_frames`, `select_every_nth`, and optional `vae` the same way you would with the VideoHelperSuite baseline node
+4. Execute the workflow to download or reuse the cached remote asset through VideoHelperSuite's existing path loader behavior
 
-## Development
+Notes:
 
-For those interested in understanding how Vue can be integrated into ComfyUI custom nodes:
-
-1. Review the code structure to see how Vue components are mounted
-2. Examine the ComfyUI API integration patterns
-3. Note how PrimeVue components and i18n are initialized and used
+- This node targets the non-ffmpeg `VHS_LoadVideo` behavior, not `VHS_LoadVideoFFmpeg`
+- The input is intentionally a plain string widget
+- Invalid, blank, or non-HTTP(S) URLs are rejected before the delegate loader runs
 
 ## Contributing
 
