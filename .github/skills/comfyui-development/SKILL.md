@@ -29,6 +29,19 @@ Start with the official docs before making assumptions:
 4. Prefer upstream source for current implementation details such as node lifecycle, server message flow, request handlers, and compatibility expectations.
 5. Keep changes aligned with this repository's existing node patterns unless the task explicitly requires broader refactoring.
 
+## Repo Workflow
+
+- Use https://prd-comfyui.devlabhq.com/ as the active development ComfyUI instance.
+- Assume the node pack there is on the nightly build, which tracks the latest code from `master`.
+- Treat released versions as the production install path only when the team is not actively developing, which is uncommon.
+
+## Browser Update Checklist
+
+1. Click `Manager`.
+2. Click `Custom Nodes Manager`.
+3. Filter by `Installed` and type `ImageGen Toolkit Dev Utils` in the `Search` box.
+4. Click `Try update`.
+
 ## Practical Checklist
 
 - Confirm whether the task is about node authoring, runtime behavior, or server integration.
