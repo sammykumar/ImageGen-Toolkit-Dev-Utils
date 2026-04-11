@@ -15,5 +15,5 @@
     "sync:pyproject-version": "node scripts/sync-pyproject-version.mjs",
     "version": "npm run sync:pyproject-version && git add pyproject.toml package-lock.json"
   },
-  "version": "0.0.3"
+  "version": "0.0.4"
 }
