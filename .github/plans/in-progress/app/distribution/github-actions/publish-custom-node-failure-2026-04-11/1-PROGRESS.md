@@ -8,7 +8,7 @@
 
 **Date**: 2026-04-11  
 **Agent**: vibe-flow  
-**Status**: In Progress  
+**Status**: Complete  
 **Based on Spec**: `3-SPEC.md`
 
 ### Goal
@@ -72,7 +72,7 @@ Use the failing run, the current workflow file, and repository metadata to isola
 
 **Dependencies**: Requires Task 1 complete
 
-**Status**: 🔄 In Progress
+**Status**: ✅ Complete
 
 ---
 
@@ -98,7 +98,7 @@ Use the failing run, the current workflow file, and repository metadata to isola
 
 **Dependencies**: Requires Task 2 complete
 
-**Status**: ⬜ Not Started
+**Status**: ✅ Complete
 
 ---
 
@@ -106,9 +106,9 @@ Use the failing run, the current workflow file, and repository metadata to isola
 
 | Status         | Count | Tasks     |
 | -------------- | ----- | --------- |
-| ✅ Complete    | 1     | Task 1    |
-| 🔄 In Progress | 1     | Task 2    |
-| ⬜ Not Started | 1     | Task 3    |
+| ✅ Complete    | 3     | Tasks 1-3 |
+| 🔄 In Progress | 0     | -         |
+| ⬜ Not Started | 0     | -         |
 | **Total**      | **3** | -         |
 
 ---
@@ -121,6 +121,9 @@ Use the failing run, the current workflow file, and repository metadata to isola
 | ---------- | ------------------ | ------- | ---------------------------------------- |
 | 2026-04-11 | Orchestrator Init  | ✅ PASS | Incident plan opened for publish-step GitHub Actions failure |
 | 2026-04-11 | Research Agent     | ✅ PASS | Root cause isolated to publish running in PR context; push-only gate recommended |
+| 2026-04-11 | Implement Agent    | ✅ PASS | Publish step gated to push on `master` only |
+| 2026-04-11 | Test Agent         | ✅ PASS | Workflow syntax and static semantics validated locally |
+| 2026-04-11 | Final Review       | ✅ PASS | Minimal workflow fix applied; hosted-run confirmation remains external |
 
 ---
 
@@ -196,6 +199,93 @@ Use the failing run, the current workflow file, and repository metadata to isola
 | Item                                      | Priority | Owner | Due        | Link |
 | ----------------------------------------- | -------- | ----- | ---------- | ---- |
 | Apply step-level push-only guard to publish step | P1       | Team  | 2026-04-11 | -    |
+
+---
+
+## 2026-04-11 — Implement Agent
+
+### Summary
+
+| Field   | Value |
+| ------- | ----- |
+| Goal    | Apply the minimal workflow guard to stop publishing during PR runs |
+| Scope   | `.github/workflows/vite-build.yml` only |
+| Status  | ✅ PASS |
+| Owner   | implement-agent |
+| Related | Plan: `.github/plans/in-progress/app/distribution/github-actions/publish-custom-node-failure-2026-04-11/` |
+
+### Changes
+
+| Area              | Details |
+| ----------------- | ------- |
+| What changed      | - Added a step-level `if` guard to `Publish Custom Node` |
+| Notes / decisions | - Left PR build coverage intact<br>- Avoided broader workflow restructuring |
+
+**Files changed**
+
+- `.github/workflows/vite-build.yml` (modified)
+
+### Verification
+
+- [x] Workflow file diagnostics are clean
+- [x] Local YAML syntax parse succeeded
+
+---
+
+## 2026-04-11 — Test Agent
+
+### Summary
+
+| Field       | Value |
+| ----------- | ----- |
+| Test suite  | focused workflow validation |
+| Environment | local editor diagnostics plus YAML parse fallback |
+| Status      | ✅ PASS |
+| Owner       | test-agent |
+
+### Results
+
+| Metric      | Value |
+| ----------- | ----- |
+| Diagnostics | clean |
+| YAML parse  | pass |
+
+### Verification
+
+- [x] `.github/workflows/vite-build.yml` has no editor errors
+- [x] The publish step is now guarded by `github.event_name == 'push' && github.ref == 'refs/heads/master'`
+- [x] Build step remains unchanged for PR validation
+
+### Notes
+
+- `actionlint` is not installed locally, so semantic validation was limited to diagnostics plus YAML parsing.
+- Hosted GitHub Actions behavior still needs confirmation from a real PR or push run.
+
+---
+
+## 2026-04-11 — Final Review
+
+### Summary
+
+| Field  | Value |
+| ------ | ----- |
+| Goal   | Close the incident with a minimal, defensible workflow fix |
+| Scope  | Publish-step gating in GitHub Actions |
+| Status | ✅ PASS |
+| Owner  | vibe-flow |
+
+### Changes
+
+| Area                  | Details |
+| --------------------- | ------- |
+| Root cause addressed  | - Workflow no longer attempts registry publish during PR validation |
+| Residual gap          | - Real hosted run and token health remain external operational checks |
+
+### Verification
+
+- [x] Research isolated a single primary control point
+- [x] Implementation applied the minimal workflow change
+- [x] Test-agent confirmed local validation passed
 
 ## Notes
 
