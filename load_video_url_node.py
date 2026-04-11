@@ -186,8 +186,26 @@ def _compute_frame_step(select_every_nth, force_rate, source_fps):
     return effective_step
 
 
+def _open_video_reader(video_path, iio, imageio):
+    try:
+        metadata = iio.immeta(video_path, plugin="ffmpeg")
+        return metadata, iio.imiter(video_path, plugin="ffmpeg"), None
+    except Exception as primary_exc:
+        try:
+            legacy_reader = imageio.get_reader(video_path, format="ffmpeg")
+            return legacy_reader.get_meta_data() or {}, legacy_reader, legacy_reader
+        except Exception as fallback_exc:
+            raise RuntimeError(
+                "Load Video URL could not find a usable ffmpeg decode backend for "
+                f"'{video_path}'. imageio.v3 plugin='ffmpeg' failed with: {primary_exc}. "
+                "Legacy imageio.get_reader(..., format='ffmpeg') also failed with: "
+                f"{fallback_exc}. Ensure imageio[ffmpeg] is installed in the ComfyUI Python environment."
+            ) from fallback_exc
+
+
 def _decode_video_file(video_path, *, force_rate, custom_width, custom_height, frame_load_cap, skip_first_frames, select_every_nth):
     try:
+        import imageio
         import imageio.v3 as iio
         import numpy as np
         import torch
@@ -196,26 +214,31 @@ def _decode_video_file(video_path, *, force_rate, custom_width, custom_height, f
             "Load Video URL requires torch, numpy, and imageio in the ComfyUI Python environment"
         ) from exc
 
-    metadata = iio.immeta(video_path, plugin="ffmpeg")
-    source_fps = float(metadata.get("fps") or 0)
-    frame_step = _compute_frame_step(select_every_nth, force_rate, source_fps)
+    metadata, frame_iterator, closeable_reader = _open_video_reader(video_path, iio, imageio)
 
-    collected_frames = []
-    emitted_frames = 0
+    try:
+        source_fps = float(metadata.get("fps") or 0)
+        frame_step = _compute_frame_step(select_every_nth, force_rate, source_fps)
 
-    for frame_index, frame in enumerate(iio.imiter(video_path, plugin="ffmpeg")):
-        if frame_index < skip_first_frames:
-            continue
+        collected_frames = []
+        emitted_frames = 0
 
-        if (frame_index - skip_first_frames) % frame_step != 0:
-            continue
+        for frame_index, frame in enumerate(frame_iterator):
+            if frame_index < skip_first_frames:
+                continue
 
-        resized_frame = _resize_frame(frame, custom_width, custom_height)
-        collected_frames.append(torch.from_numpy(np.asarray(resized_frame)).float() / 255.0)
-        emitted_frames += 1
+            if (frame_index - skip_first_frames) % frame_step != 0:
+                continue
 
-        if frame_load_cap > 0 and emitted_frames >= frame_load_cap:
-            break
+            resized_frame = _resize_frame(frame, custom_width, custom_height)
+            collected_frames.append(torch.from_numpy(np.asarray(resized_frame)).float() / 255.0)
+            emitted_frames += 1
+
+            if frame_load_cap > 0 and emitted_frames >= frame_load_cap:
+                break
+    finally:
+        if closeable_reader is not None:
+            closeable_reader.close()
 
     if not collected_frames:
         raise RuntimeError(f"No frames could be loaded from '{video_path}'")

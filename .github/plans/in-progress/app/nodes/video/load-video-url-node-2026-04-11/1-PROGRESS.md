@@ -188,14 +188,40 @@ Use `VHS_LoadVideo` as a behavioral baseline only. Recreate the required load co
 
 ---
 
+#### Task 6: Fix decoder backend compatibility
+
+**Goal**: Make the internal decode path work in the real ComfyUI runtime where `imageio.v3` does not recognize `plugin="ffmpeg"`.
+
+**Files**:
+
+- `load_video_url_node.py` (modify)
+- `tests/test_load_video_url_node.py` (modify)
+- `README.md` (modify if runtime notes change)
+
+**Steps**:
+
+1. Replace the brittle `imageio.v3` plugin selection with a decoder path that is compatible with the installed ffmpeg backend.
+2. Preserve the current frame-selection and resize behavior while changing only the backend access pattern needed for real runtime compatibility.
+3. Add a regression test that would have caught the `"ffmpeg" is not a registered plugin name` failure path.
+
+**Verification**:
+
+- [x] Focused tests cover the decoder compatibility change
+- [x] The decoder no longer hardcodes the unsupported `imageio.v3` plugin path on the supported execution path
+- [x] User-facing error text improves if no usable decode backend is available
+
+**Status**: ✅ Complete
+
+---
+
 ### Task Summary
 
 | Status         | Count | Tasks     |
 | -------------- | ----- | --------- |
-| ✅ Complete    | 6     | Tasks 0-5 |
+| ✅ Complete    | 7     | Tasks 0-6 |
 | 🔄 In Progress | 0     | -         |
 | ⬜ Not Started | 0     | -         |
-| **Total**      | **6** | -         |
+| **Total**      | **7** | -         |
 
 ---
 
@@ -217,6 +243,9 @@ Use `VHS_LoadVideo` as a behavioral baseline only. Recreate the required load co
 | 2026-04-11 | Clarification Follow-up | ✅ PASS | Runtime dependency on VideoHelperSuite rejected; active plan reopened around self-contained implementation |
 | 2026-04-11 | Self-contained Reimplementation | ✅ PASS | Removed VideoHelperSuite runtime dependency, added internal cache/download/decode helpers, and updated docs/tests |
 | 2026-04-11 | Self-contained Validation | ✅ PASS | Focused tests passed and module import succeeded with VideoHelperSuite explicitly blocked |
+| 2026-04-11 | Runtime Decode Failure | ✅ PASS | Real ComfyUI execution exposed incompatible `imageio.v3 plugin="ffmpeg"` usage; active plan reopened for backend compatibility fix |
+| 2026-04-11 | Decoder Compatibility Fix | ✅ PASS | Added fallback from `imageio.v3 plugin="ffmpeg"` to legacy `imageio.get_reader(..., format="ffmpeg")` |
+| 2026-04-11 | Decoder Compatibility Validation | ✅ PASS | Focused regression suite passed and covers the exact plugin-registration failure path |
 
 ---
 

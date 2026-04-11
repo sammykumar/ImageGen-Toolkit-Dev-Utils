@@ -114,6 +114,81 @@ class LoadVideoURLNodeTests(unittest.TestCase):
         self.assertEqual(len(changed), 64)
         self.assertEqual(changed, module.LoadVideoURL.IS_CHANGED("https://example.com/video.mp4"))
 
+    def test_decode_video_file_falls_back_to_legacy_ffmpeg_reader(self):
+        legacy_reader = _FakeLegacyReader(
+            metadata={"fps": 24, "nframes": 5},
+            frames=["frame-0", "frame-1", "frame-2", "frame-3", "frame-4"],
+        )
+        imageio_module = types.ModuleType("imageio")
+        imageio_module.get_reader = mock.Mock(return_value=legacy_reader)
+
+        imageio_v3_module = types.ModuleType("imageio.v3")
+        imageio_v3_module.immeta = mock.Mock(side_effect=ValueError("`ffmpeg` is not a registered plugin name."))
+        imageio_v3_module.imiter = mock.Mock()
+        imageio_module.v3 = imageio_v3_module
+
+        with mock.patch.dict(
+            sys.modules,
+            {
+                "imageio": imageio_module,
+                "imageio.v3": imageio_v3_module,
+                "numpy": _FakeNumpyModule(),
+                "torch": _FakeTorchModule(),
+            },
+        ):
+            images, frame_count, audio, video_info = module._decode_video_file(
+                "/tmp/video.mp4",
+                force_rate=0,
+                custom_width=0,
+                custom_height=0,
+                frame_load_cap=0,
+                skip_first_frames=1,
+                select_every_nth=2,
+            )
+
+        self.assertEqual(frame_count, 2)
+        self.assertIsNone(audio)
+        self.assertEqual(images["dim"], 0)
+        self.assertEqual(images["values"], [("frame-1", 255.0), ("frame-3", 255.0)])
+        self.assertEqual(video_info["source_fps"], 24.0)
+        self.assertEqual(video_info["loaded_fps"], 12.0)
+        self.assertEqual(video_info["source_frame_count"], 5)
+        self.assertTrue(legacy_reader.closed)
+        imageio_module.get_reader.assert_called_once_with("/tmp/video.mp4", format="ffmpeg")
+
+    def test_decode_video_file_reports_backend_failures_clearly(self):
+        imageio_module = types.ModuleType("imageio")
+        imageio_module.get_reader = mock.Mock(side_effect=RuntimeError("legacy reader missing"))
+
+        imageio_v3_module = types.ModuleType("imageio.v3")
+        imageio_v3_module.immeta = mock.Mock(side_effect=ValueError("`ffmpeg` is not a registered plugin name."))
+        imageio_v3_module.imiter = mock.Mock()
+        imageio_module.v3 = imageio_v3_module
+
+        with mock.patch.dict(
+            sys.modules,
+            {
+                "imageio": imageio_module,
+                "imageio.v3": imageio_v3_module,
+                "numpy": _FakeNumpyModule(),
+                "torch": _FakeTorchModule(),
+            },
+        ):
+            with self.assertRaises(RuntimeError) as exc_info:
+                module._decode_video_file(
+                    "/tmp/video.mp4",
+                    force_rate=0,
+                    custom_width=0,
+                    custom_height=0,
+                    frame_load_cap=0,
+                    skip_first_frames=0,
+                    select_every_nth=1,
+                )
+
+        self.assertIn("usable ffmpeg decode backend", str(exc_info.exception))
+        self.assertIn("imageio.v3 plugin='ffmpeg' failed", str(exc_info.exception))
+        self.assertIn("legacy reader missing", str(exc_info.exception))
+
 
 class _FakeResponse:
     def __init__(self, *, headers, chunks):
@@ -128,6 +203,49 @@ class _FakeResponse:
 
     def read(self, _size):
         return self._chunks.pop(0)
+
+
+class _FakeNumpyModule:
+    @staticmethod
+    def asarray(value):
+        return value
+
+
+class _FakeTensor:
+    def __init__(self, value):
+        self.value = value
+
+    def float(self):
+        return self
+
+    def __truediv__(self, divisor):
+        return (self.value, divisor)
+
+
+class _FakeTorchModule:
+    @staticmethod
+    def from_numpy(value):
+        return _FakeTensor(value)
+
+    @staticmethod
+    def stack(values, dim=0):
+        return {"values": values, "dim": dim}
+
+
+class _FakeLegacyReader:
+    def __init__(self, *, metadata, frames):
+        self._metadata = metadata
+        self._frames = list(frames)
+        self.closed = False
+
+    def get_meta_data(self):
+        return self._metadata
+
+    def __iter__(self):
+        return iter(self._frames)
+
+    def close(self):
+        self.closed = True
 
 
 if __name__ == "__main__":
