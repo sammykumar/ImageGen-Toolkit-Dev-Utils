@@ -8,7 +8,7 @@
 
 **Date**: 2026-04-11  
 **Agent**: vibe-flow  
-**Status**: In Progress
+**Status**: Complete
 **Based on Spec**: `3-SPEC.md`
 
 ### Goal
@@ -72,7 +72,7 @@ Validate the install path end to end: repository cloneability, ComfyUI-Manager e
 
 **Dependencies**: Requires Task 1 complete
 
-**Status**: 🔄 In Progress
+**Status**: ✅ Complete
 
 ---
 
@@ -80,8 +80,8 @@ Validate the install path end to end: repository cloneability, ComfyUI-Manager e
 
 | Status         | Count | Tasks     |
 | -------------- | ----- | --------- |
-| ✅ Complete    | 1     | Task 1    |
-| 🔄 In Progress | 1     | Task 2    |
+| ✅ Complete    | 2     | Tasks 1-2 |
+| 🔄 In Progress | 0     | -         |
 | ⬜ Not Started | 0     | -         |
 | **Total**      | **2** | -         |
 
@@ -96,6 +96,7 @@ Validate the install path end to end: repository cloneability, ComfyUI-Manager e
 | 2026-04-11 | Orchestrator Init | 🔄 INFO | Diagnostic plan opened for install failure |
 | 2026-04-11 | Research Complete | ✅ PASS | Root cause isolated to published repository URL mismatch |
 | 2026-04-11 | Implementation | ✅ PASS | `pyproject.toml` corrected to the real GitHub slug; README install metadata cleaned up |
+| 2026-04-11 | Validation | ✅ PASS | Corrected URL matches origin and resolves; old URL still fails with clone exit 128 |
 
 ---
 
@@ -135,7 +136,6 @@ Validate the install path end to end: repository cloneability, ComfyUI-Manager e
 
 | Item                                      | Priority | Owner | Due        | Link |
 | ----------------------------------------- | -------- | ----- | ---------- | ---- |
-| Validate the corrected URL through a narrow post-edit check | P0       | Team  | 2026-04-11 | -    |
 | Refresh or republish upstream metadata if Manager still serves cached values | P1       | Team  | 2026-04-11 | -    |
 
 ---
