@@ -291,14 +291,38 @@ Use `VHS_LoadVideo` as a behavioral baseline only. Recreate the required load co
 
 ---
 
+#### Task 10: Make preview aspect-ratio aware
+
+**Goal**: Keep the inline input preview responsive to node width while sizing its height from the loaded video's real aspect ratio instead of a fixed preview box.
+
+**Files**:
+
+- `src/main.ts` (modify)
+
+**Steps**:
+
+1. Capture the loaded video's intrinsic aspect ratio from preview metadata or media events.
+2. Use that aspect ratio when computing preview height so portrait videos stay portrait and landscape videos stay landscape.
+3. Keep the preview responsive to node resizing without rendering at full source resolution.
+
+**Verification**:
+
+- [ ] Preview sizing logic is driven by intrinsic media aspect ratio rather than a fixed height
+- [ ] Portrait videos compute a taller preview than landscape videos at the same node width
+- [ ] Existing preview load and hide behavior remains intact
+
+**Status**: 🔄 In Progress
+
+---
+
 ### Task Summary
 
 | Status         | Count | Tasks     |
 | -------------- | ----- | --------- |
 | ✅ Complete    | 8     | Tasks 0-7 |
-| 🔄 In Progress | 2     | Tasks 8-9 |
+| 🔄 In Progress | 3     | Tasks 8-10 |
 | ⬜ Not Started | 0     | -         |
-| **Total**      | **10** | -         |
+| **Total**      | **11** | -         |
 
 ---
 

@@ -8,7 +8,7 @@
 
 **Date**: 2026-04-11  
 **Agent**: vibe-flow  
-**Status**: In Progress  
+**Status**: Complete  
 **Based on Spec**: `3-SPEC.md`
 
 ### Goal
@@ -43,11 +43,11 @@ Treat this as a narrow skill-content update. Extend the existing skill with repo
 
 **Verification**:
 
-- [ ] Skill content includes the dev workflow details
-- [ ] Skill content includes the manager update steps with the expected labels
-- [ ] Touched markdown surface is diagnostics-clean
+- [x] Skill content includes the dev workflow details
+- [x] Skill content includes the manager update steps with the expected labels
+- [x] Touched markdown surface is diagnostics-clean
 
-**Status**: 🔄 In Progress
+**Status**: ✅ Complete
 
 ---
 
@@ -55,8 +55,8 @@ Treat this as a narrow skill-content update. Extend the existing skill with repo
 
 | Status         | Count | Tasks    |
 | -------------- | ----- | -------- |
-| ✅ Complete    | 0     | -        |
-| 🔄 In Progress | 1     | Task 1   |
+| ✅ Complete    | 1     | Task 1   |
+| 🔄 In Progress | 0     | -        |
 | ⬜ Not Started | 0     | -        |
 | **Total**      | **1** | -        |
 
@@ -69,6 +69,9 @@ Treat this as a narrow skill-content update. Extend the existing skill with repo
 | Date       | Work Item         | Status  | Key outputs |
 | ---------- | ----------------- | ------- | ----------- |
 | 2026-04-11 | Orchestrator Plan | ✅ PASS | Fast-track plan created for ComfyUI skill workflow update |
+| 2026-04-11 | Implement Agent | ✅ PASS | Skill updated with nightly workflow guidance and manager-based update steps |
+| 2026-04-11 | Test Agent | ✅ PASS | Focused markdown validation passed after one wording repair |
+| 2026-04-11 | Final Review | ✅ PASS | Request satisfied in the existing ComfyUI skill |
 
 ---
 
@@ -96,3 +99,84 @@ Treat this as a narrow skill-content update. Extend the existing skill with repo
 - [x] Required plan folder created under `in-progress/`
 - [x] Required plan files instantiated
 - [x] Plan scoped to a single narrow implementation slice
+
+---
+
+## 2026-04-11 — Implement Agent
+
+### Summary
+
+| Field   | Value |
+| ------- | ----- |
+| Goal    | Extend the existing skill with repo workflow and update-path guidance |
+| Scope   | Single-file markdown update to `.github/skills/comfyui-development/SKILL.md` |
+| Status  | ✅ PASS |
+| Owner   | implement-agent |
+| Related | Plan: `.github/plans/in-progress/app/nodes/video/comfyui-development-skill-workflow-update-2026-04-11/` |
+
+### Changes
+
+| Area              | Details |
+| ----------------- | ------- |
+| What changed      | - Added a repo workflow section for the dev ComfyUI instance at `https://prd-comfyui.devlabhq.com/`<br>- Documented that the installed node pack there is currently nightly and tracks latest `master` code<br>- Documented that released versions are typically only installed on production when active development is paused, which is rare<br>- Added the browser-based update checklist using `Manager`, `Custom Nodes Manager`, `Installed`, `Search for ImageGen Toolkit Dev Utils`, and `Try update` |
+| Notes / decisions | - Preserved the existing docs-first guidance and upstream ComfyUI source fallback<br>- A first validation pass found a wording mismatch in the search step, which was repaired immediately in the same file |
+
+**Files changed**
+
+- `.github/skills/comfyui-development/SKILL.md`
+
+### Verification
+
+- [x] Repo workflow guidance added
+- [x] Browser update checklist added with the required labels
+- [x] Existing docs/source-reference guidance preserved
+
+---
+
+## 2026-04-11 — Test Agent
+
+### Summary
+
+| Field   | Value |
+| ------- | ----- |
+| Goal    | Prove the updated skill content matches the requested workflow and update steps |
+| Scope   | Markdown diagnostics and direct content assertions on the touched skill file |
+| Status  | ✅ PASS |
+| Owner   | test-agent |
+| Related | Plan: `.github/plans/in-progress/app/nodes/video/comfyui-development-skill-workflow-update-2026-04-11/` |
+
+### Changes
+
+| Area              | Details |
+| ----------------- | ------- |
+| What changed      | - Confirmed clean diagnostics on the touched skill file<br>- Confirmed nightly-versus-release workflow guidance is present<br>- Confirmed the exact checklist labels are present after a one-line repair<br>- Confirmed the original official docs and upstream source fallback remain present |
+| Notes / decisions | - Validation stayed focused on the changed markdown slice and reran after the first wording defect was corrected |
+
+### Verification
+
+- [x] `get_errors` clean for `.github/skills/comfyui-development/SKILL.md`
+- [x] Repo workflow guidance present
+- [x] Exact manager/update labels present
+- [x] Official docs and upstream fallback preserved
+
+---
+
+## 2026-04-11 — Final Review
+
+### Summary
+
+| Field   | Value |
+| ------- | ----- |
+| Goal    | Close the fast-track plan after implementation and validation |
+| Scope   | Outcome review and residual-risk capture |
+| Status  | ✅ PASS |
+| Owner   | vibe-flow |
+| Related | Plan: `.github/plans/in-progress/app/nodes/video/comfyui-development-skill-workflow-update-2026-04-11/` |
+
+### Outcome
+
+The existing ComfyUI development skill now captures the current repo workflow and the practical manager-based update path for the node pack while retaining the original docs-first and source-fallback guidance.
+
+### Residual Risk
+
+- The update steps reflect the currently verified live UI labels in ComfyUI Manager and may need a small refresh if that UI changes later.

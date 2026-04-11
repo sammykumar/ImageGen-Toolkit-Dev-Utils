@@ -39,7 +39,7 @@ Start with the official docs before making assumptions:
 
 1. Click `Manager`.
 2. Click `Custom Nodes Manager`.
-3. Filter by `Installed` and type `ImageGen Toolkit Dev Utils` in the `Search` box.
+3. Filter by `Installed` and Search for ImageGen Toolkit Dev Utils in the `Search` box.
 4. Click `Try update`.
 
 ## Practical Checklist

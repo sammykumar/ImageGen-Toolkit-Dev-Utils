@@ -54,7 +54,9 @@ type ExtensionLike = {
 const TARGET_NODE_NAME = 'load-video-url'
 const PREVIEW_WIDGET_NAME = 'video_url_preview'
 const MIN_NODE_WIDTH = 320
-const PREVIEW_HEIGHT = 180
+const DEFAULT_PREVIEW_ASPECT_RATIO = 16 / 9
+const MIN_PREVIEW_HEIGHT = 120
+const NODE_CHROME_HEIGHT = 120
 const EXTENSION_NAME = 'imagegen-toolkit-dev-utils.load-video-url-preview'
 
 console.info(`[${EXTENSION_NAME}] build`, __IMAGEGEN_TOOLKIT_BUILD_INFO__)
@@ -84,16 +86,32 @@ function isPreviewableMp4Url(value: unknown): value is string {
 	}
 }
 
-function resizeNodeForPreview(node: NodeLike) {
+function getIntrinsicAspectRatio(video: HTMLVideoElement): number | null {
+	if (video.videoWidth <= 0 || video.videoHeight <= 0) {
+		return null
+	}
+
+	return video.videoWidth / video.videoHeight
+}
+
+function resizeNodeForPreview(node: NodeLike, aspectRatio = DEFAULT_PREVIEW_ASPECT_RATIO) {
 	const computedSize = node.computeSize?.()
 	if (!computedSize) {
 		return
 	}
 
+	const nextWidth = Math.max(node.size?.[0] ?? computedSize[0], MIN_NODE_WIDTH)
+	const previewWidth = Math.max(nextWidth - 16, MIN_NODE_WIDTH - 16)
+	const previewHeight = Math.max(Math.round(previewWidth / aspectRatio), MIN_PREVIEW_HEIGHT)
+
 	const nextSize: [number, number] = [
-		Math.max(computedSize[0], MIN_NODE_WIDTH),
-		Math.max(computedSize[1], PREVIEW_HEIGHT + 120)
+		nextWidth,
+		Math.max(computedSize[1], previewHeight + NODE_CHROME_HEIGHT)
 	]
+
+	if (node.size?.[0] === nextSize[0] && node.size?.[1] === nextSize[1]) {
+		return
+	}
 
 	if (typeof node.setSize === 'function') {
 		node.setSize(nextSize)
@@ -112,6 +130,7 @@ function attachPreview(node: NodeLike) {
 	wrapper.style.display = 'none'
 	wrapper.style.width = '100%'
 	wrapper.style.padding = '8px 0 0'
+	wrapper.style.aspectRatio = `${DEFAULT_PREVIEW_ASPECT_RATIO}`
 
 	const video = document.createElement('video')
 	video.controls = true
@@ -121,13 +140,23 @@ function attachPreview(node: NodeLike) {
 	video.playsInline = true
 	video.preload = 'metadata'
 	video.style.width = '100%'
-	video.style.maxHeight = `${PREVIEW_HEIGHT}px`
+	video.style.height = '100%'
 	video.style.display = 'block'
 	video.style.objectFit = 'contain'
 	video.style.background = '#111'
 	video.style.borderRadius = '8px'
 
 	wrapper.append(video)
+
+	let previewAspectRatio = DEFAULT_PREVIEW_ASPECT_RATIO
+
+	const applyPreviewAspectRatio = (nextAspectRatio: number | null) => {
+		previewAspectRatio = nextAspectRatio && Number.isFinite(nextAspectRatio) && nextAspectRatio > 0
+			? nextAspectRatio
+			: DEFAULT_PREVIEW_ASPECT_RATIO
+		wrapper.style.aspectRatio = `${previewAspectRatio}`
+		resizeNodeForPreview(node, previewAspectRatio)
+	}
 
 	node.addDOMWidget(PREVIEW_WIDGET_NAME, 'preview', wrapper, {
 		serialize: false,
@@ -140,6 +169,21 @@ function attachPreview(node: NodeLike) {
 		}
 	})
 
+	const resizeObserver = new ResizeObserver(() => {
+		if (wrapper.style.display !== 'none') {
+			resizeNodeForPreview(node, previewAspectRatio)
+		}
+	})
+	resizeObserver.observe(wrapper)
+
+	video.addEventListener('loadedmetadata', () => {
+		applyPreviewAspectRatio(getIntrinsicAspectRatio(video))
+	})
+
+	video.addEventListener('emptied', () => {
+		applyPreviewAspectRatio(null)
+	})
+
 	const sync = () => {
 		const widget = getVideoUrlWidget(node)
 		const rawValue = typeof widget?.value === 'string' ? widget.value : ''
@@ -147,26 +191,30 @@ function attachPreview(node: NodeLike) {
 
 		if (!isPreviewableMp4Url(nextUrl)) {
 			wrapper.style.display = 'none'
+			applyPreviewAspectRatio(null)
 			video.pause()
+			delete video.dataset.previewUrl
 			video.removeAttribute('src')
 			video.load()
-			resizeNodeForPreview(node)
 			return
 		}
 
 		wrapper.style.display = 'block'
 		if (video.dataset.previewUrl !== nextUrl) {
+			applyPreviewAspectRatio(null)
 			video.dataset.previewUrl = nextUrl
 			video.src = nextUrl
 			video.load()
 		}
 
 		void video.play().catch(() => undefined)
-		resizeNodeForPreview(node)
+		resizeNodeForPreview(node, previewAspectRatio)
 	}
 
 	const cleanup = () => {
+		resizeObserver.disconnect()
 		video.pause()
+		delete video.dataset.previewUrl
 		video.removeAttribute('src')
 		video.load()
 	}

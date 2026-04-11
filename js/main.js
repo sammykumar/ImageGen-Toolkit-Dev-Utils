@@ -1,46 +1,56 @@
-import { app as v } from "../../../scripts/app.js";
-var _ = { commitHash: "3acff040f762", packageVersion: "0.0.4" };
-const h = "load-video-url", E = "video_url_preview", w = 320, y = 180, m = "imagegen-toolkit-dev-utils.load-video-url-preview";
-console.info(`[${m}] build`, _);
-function p(e) {
+import { app as w } from "../../../scripts/app.js";
+var b = { commitHash: "9d6145b28a38", packageVersion: "0.0.4" };
+const I = "load-video-url", N = "video_url_preview", h = 320, f = 16 / 9, g = 120, M = 120, _ = "imagegen-toolkit-dev-utils.load-video-url-preview";
+console.info(`[${_}] build`, b);
+function m(t) {
   var r;
-  return (r = e.widgets) == null ? void 0 : r.find((t) => t.name === "video_url");
+  return (r = t.widgets) == null ? void 0 : r.find((e) => e.name === "video_url");
 }
-function N(e) {
-  if (typeof e != "string")
+function z(t) {
+  if (typeof t != "string")
     return !1;
-  const r = e.trim();
+  const r = t.trim();
   if (!r)
     return !1;
   try {
-    const t = new URL(r);
-    return (t.protocol === "http:" || t.protocol === "https:") && t.pathname.toLowerCase().endsWith(".mp4");
+    const e = new URL(r);
+    return (e.protocol === "http:" || e.protocol === "https:") && e.pathname.toLowerCase().endsWith(".mp4");
   } catch {
     return !1;
   }
 }
-function d(e) {
-  var o;
-  const r = (o = e.computeSize) == null ? void 0 : o.call(e);
-  if (!r)
-    return;
-  const t = [
-    Math.max(r[0], w),
-    Math.max(r[1], y + 120)
-  ];
-  if (typeof e.setSize == "function") {
-    e.setSize(t);
-    return;
-  }
-  e.size = t;
+function R(t) {
+  return t.videoWidth <= 0 || t.videoHeight <= 0 ? null : t.videoWidth / t.videoHeight;
 }
-function f(e) {
-  if (e.__loadVideoUrlPreviewState || typeof e.addDOMWidget != "function")
+function v(t, r = f) {
+  var p, l, c, u;
+  const e = (p = t.computeSize) == null ? void 0 : p.call(t);
+  if (!e)
+    return;
+  const s = Math.max(((l = t.size) == null ? void 0 : l[0]) ?? e[0], h), a = Math.max(s - 16, h - 16), n = Math.max(Math.round(a / r), g), o = [
+    s,
+    Math.max(e[1], n + M)
+  ];
+  if (!(((c = t.size) == null ? void 0 : c[0]) === o[0] && ((u = t.size) == null ? void 0 : u[1]) === o[1])) {
+    if (typeof t.setSize == "function") {
+      t.setSize(o);
+      return;
+    }
+    t.size = o;
+  }
+}
+function E(t) {
+  if (t.__loadVideoUrlPreviewState || typeof t.addDOMWidget != "function")
     return;
   const r = document.createElement("div");
-  r.style.display = "none", r.style.width = "100%", r.style.padding = "8px 0 0";
-  const t = document.createElement("video");
-  t.controls = !0, t.autoplay = !0, t.loop = !0, t.muted = !0, t.playsInline = !0, t.preload = "metadata", t.style.width = "100%", t.style.maxHeight = `${y}px`, t.style.display = "block", t.style.objectFit = "contain", t.style.background = "#111", t.style.borderRadius = "8px", r.append(t), e.addDOMWidget(E, "preview", r, {
+  r.style.display = "none", r.style.width = "100%", r.style.padding = "8px 0 0", r.style.aspectRatio = `${f}`;
+  const e = document.createElement("video");
+  e.controls = !0, e.autoplay = !0, e.loop = !0, e.muted = !0, e.playsInline = !0, e.preload = "metadata", e.style.width = "100%", e.style.height = "100%", e.style.display = "block", e.style.objectFit = "contain", e.style.background = "#111", e.style.borderRadius = "8px", r.append(e);
+  let s = f;
+  const a = (i) => {
+    s = i && Number.isFinite(i) && i > 0 ? i : f, r.style.aspectRatio = `${s}`, v(t, s);
+  };
+  t.addDOMWidget(N, "preview", r, {
     serialize: !1,
     hideOnZoom: !1,
     getValue() {
@@ -49,44 +59,52 @@ function f(e) {
     setValue() {
     }
   });
+  const n = new ResizeObserver(() => {
+    r.style.display !== "none" && v(t, s);
+  });
+  n.observe(r), e.addEventListener("loadedmetadata", () => {
+    a(R(e));
+  }), e.addEventListener("emptied", () => {
+    a(null);
+  });
   const o = () => {
-    const s = p(e), l = (typeof (s == null ? void 0 : s.value) == "string" ? s.value : "").trim();
-    if (!N(l)) {
-      r.style.display = "none", t.pause(), t.removeAttribute("src"), t.load(), d(e);
+    const i = m(t), d = (typeof (i == null ? void 0 : i.value) == "string" ? i.value : "").trim();
+    if (!z(d)) {
+      r.style.display = "none", a(null), e.pause(), delete e.dataset.previewUrl, e.removeAttribute("src"), e.load();
       return;
     }
-    r.style.display = "block", t.dataset.previewUrl !== l && (t.dataset.previewUrl = l, t.src = l, t.load()), t.play().catch(() => {
-    }), d(e);
-  }, a = () => {
-    t.pause(), t.removeAttribute("src"), t.load();
-  }, i = p(e), n = i == null ? void 0 : i.callback;
-  i && (i.callback = function(...s) {
-    const u = n == null ? void 0 : n.apply(this, s);
-    return o(), u;
+    r.style.display = "block", e.dataset.previewUrl !== d && (a(null), e.dataset.previewUrl = d, e.src = d, e.load()), e.play().catch(() => {
+    }), v(t, s);
+  }, p = () => {
+    n.disconnect(), e.pause(), delete e.dataset.previewUrl, e.removeAttribute("src"), e.load();
+  }, l = m(t), c = l == null ? void 0 : l.callback;
+  l && (l.callback = function(...i) {
+    const y = c == null ? void 0 : c.apply(this, i);
+    return o(), y;
   });
-  const c = e.onRemoved;
-  e.onRemoved = function(...s) {
-    return a(), c == null ? void 0 : c.apply(this, s);
-  }, e.__loadVideoUrlPreviewState = {
+  const u = t.onRemoved;
+  t.onRemoved = function(...i) {
+    return p(), u == null ? void 0 : u.apply(this, i);
+  }, t.__loadVideoUrlPreviewState = {
     sync: o,
-    cleanup: a
+    cleanup: p
   }, o();
 }
-v.registerExtension({
-  name: m,
-  beforeRegisterNodeDef(e, r) {
-    if (r.name !== h)
+w.registerExtension({
+  name: _,
+  beforeRegisterNodeDef(t, r) {
+    if (r.name !== I)
       return;
-    const t = e.prototype.onNodeCreated;
-    e.prototype.onNodeCreated = function(...a) {
-      const i = t == null ? void 0 : t.apply(this, a);
-      return f(this), i;
+    const e = t.prototype.onNodeCreated;
+    t.prototype.onNodeCreated = function(...a) {
+      const n = e == null ? void 0 : e.apply(this, a);
+      return E(this), n;
     };
-    const o = e.prototype.onConfigure;
-    e.prototype.onConfigure = function(...a) {
-      var n;
-      const i = o == null ? void 0 : o.apply(this, a);
-      return f(this), (n = this.__loadVideoUrlPreviewState) == null || n.sync(), i;
+    const s = t.prototype.onConfigure;
+    t.prototype.onConfigure = function(...a) {
+      var o;
+      const n = s == null ? void 0 : s.apply(this, a);
+      return E(this), (o = this.__loadVideoUrlPreviewState) == null || o.sync(), n;
     };
   }
 });
