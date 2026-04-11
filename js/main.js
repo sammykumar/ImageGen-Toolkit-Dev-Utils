@@ -1,7 +1,7 @@
 import { app as w } from "../../../scripts/app.js";
-var b = { commitHash: "9d6145b28a38", packageVersion: "0.0.4" };
-const I = "load-video-url", N = "video_url_preview", h = 320, f = 16 / 9, g = 120, M = 120, _ = "imagegen-toolkit-dev-utils.load-video-url-preview";
-console.info(`[${_}] build`, b);
+var I = { commitHash: "574967972565", packageVersion: "0.0.5" };
+const b = "load-video-url", N = "video_url_preview", h = 320, f = 16 / 9, g = 120, M = 120, _ = "imagegen-toolkit-dev-utils.load-video-url-preview";
+console.info(`[${_}] build`, I);
 function m(t) {
   var r;
   return (r = t.widgets) == null ? void 0 : r.find((e) => e.name === "video_url");
@@ -93,7 +93,7 @@ function E(t) {
 w.registerExtension({
   name: _,
   beforeRegisterNodeDef(t, r) {
-    if (r.name !== I)
+    if (r.name !== b)
       return;
     const e = t.prototype.onNodeCreated;
     t.prototype.onNodeCreated = function(...a) {
