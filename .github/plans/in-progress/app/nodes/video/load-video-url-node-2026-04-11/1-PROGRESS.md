@@ -214,14 +214,40 @@ Use `VHS_LoadVideo` as a behavioral baseline only. Recreate the required load co
 
 ---
 
+#### Task 7: Add input-side video preview parity
+
+**Goal**: Show a playable inline preview on the node as soon as `video_url` is configured with a valid remote mp4 URL, without requiring workflow execution.
+
+**Files**:
+
+- `src/main.ts` (modify)
+- frontend helper/component files to be added if needed
+- `README.md` (modify if preview behavior needs documenting)
+
+**Steps**:
+
+1. Add a frontend extension for `load-video-url` that creates a DOM video preview widget on the node.
+2. Listen to the `video_url` widget and update preview state immediately when the URL changes.
+3. Keep the preview hidden when the URL is blank or invalid, and show it when the URL appears previewable.
+
+**Verification**:
+
+- [x] Frontend code contains an actual node extension for `load-video-url`
+- [x] Preview logic is tied to widget changes rather than workflow execution
+- [x] Existing backend node behavior remains unaffected
+
+**Status**: ✅ Complete
+
+---
+
 ### Task Summary
 
 | Status         | Count | Tasks     |
 | -------------- | ----- | --------- |
-| ✅ Complete    | 7     | Tasks 0-6 |
+| ✅ Complete    | 8     | Tasks 0-7 |
 | 🔄 In Progress | 0     | -         |
 | ⬜ Not Started | 0     | -         |
-| **Total**      | **7** | -         |
+| **Total**      | **8** | -         |
 
 ---
 
@@ -246,6 +272,9 @@ Use `VHS_LoadVideo` as a behavioral baseline only. Recreate the required load co
 | 2026-04-11 | Runtime Decode Failure | ✅ PASS | Real ComfyUI execution exposed incompatible `imageio.v3 plugin="ffmpeg"` usage; active plan reopened for backend compatibility fix |
 | 2026-04-11 | Decoder Compatibility Fix | ✅ PASS | Added fallback from `imageio.v3 plugin="ffmpeg"` to legacy `imageio.get_reader(..., format="ffmpeg")` |
 | 2026-04-11 | Decoder Compatibility Validation | ✅ PASS | Focused regression suite passed and covers the exact plugin-registration failure path |
+| 2026-04-11 | Preview Requirement Clarification | ✅ PASS | User confirmed preview must play from a valid `video_url` before workflow execution; active plan reopened around frontend input preview |
+| 2026-04-11 | Input Preview Implementation | ✅ PASS | Added a `load-video-url` frontend extension with DOM video preview synced from the `video_url` widget |
+| 2026-04-11 | Input Preview Validation | ✅ PASS | Frontend build passed and static validation confirmed preview is callback-driven rather than execution-driven |
 
 ---
 
