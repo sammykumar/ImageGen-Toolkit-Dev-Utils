@@ -36,7 +36,7 @@ Documentation = "https://github.com/sammykumar/imagegen_toolkit_dev_utils/wiki"
 
 
 [tool.comfy]
-PublisherId = "sammykumar"
+PublisherId = "lambo-sam"
 DisplayName = "ImageGen Toolkit Dev Utils"
 Icon = ""
 Tags = []
