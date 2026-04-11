@@ -27,17 +27,17 @@ ImageGen Toolkit Dev Utils provides a working example of how to build interactiv
 
 This demonstration node is not designed to be installed directly via **git clone**. For proper functionality, please install through:
 
-- [ComfyUI Manager]()
-- [ComfyUI Registry]()
+- ComfyUI Manager
+- ComfyUI Registry
 
 ## Development Setup
 If you want to learn how to develop this custom node or modify it, you can set up a local development environment. Follow these steps:
 1. Clone the repository in your ComfyUI custom nodes directory:
    ```bash
-   git clone https://github.com/jtydhr88/ComfyUI_frontend_vue_basic
+   git clone https://github.com/sammykumar/ImageGen-Toolkit-Dev-Utils
 2. Navigate to the project directory: 
    ```bash
-   cd ComfyUI_frontend_vue_basic
+   cd ImageGen-Toolkit-Dev-Utils
    ```
 3. Install dependencies:
    ```bash

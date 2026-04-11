@@ -30,9 +30,9 @@ dev = [
 ]
 
 [project.urls]
-Repository = "https://github.com/sammykumar/imagegen_toolkit_dev_utils"
-BugTracker = "https://github.com/sammykumar/imagegen_toolkit_dev_utils/issues"
-Documentation = "https://github.com/sammykumar/imagegen_toolkit_dev_utils/wiki"
+Repository = "https://github.com/sammykumar/ImageGen-Toolkit-Dev-Utils"
+BugTracker = "https://github.com/sammykumar/ImageGen-Toolkit-Dev-Utils/issues"
+Documentation = "https://github.com/sammykumar/ImageGen-Toolkit-Dev-Utils/wiki"
 
 
 [tool.comfy]
@@ -40,7 +40,7 @@ PublisherId = "lambo-sam"
 DisplayName = "ImageGen Toolkit Dev Utils"
 Icon = ""
 Tags = []
-Repository = "https://github.com/sammykumar/imagegen_toolkit_dev_utils"
+Repository = "https://github.com/sammykumar/ImageGen-Toolkit-Dev-Utils"
 includes = ["js"]
 
 [tool.setuptools.package-data]
