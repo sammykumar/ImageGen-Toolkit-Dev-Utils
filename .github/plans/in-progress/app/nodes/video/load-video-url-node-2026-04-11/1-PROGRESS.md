@@ -8,7 +8,7 @@
 
 **Date**: 2026-04-11  
 **Agent**: vibe-flow  
-**Status**: Complete  
+**Status**: In Progress  
 **Based on Spec**: `3-SPEC.md`
 
 ### Goal
@@ -240,14 +240,40 @@ Use `VHS_LoadVideo` as a behavioral baseline only. Recreate the required load co
 
 ---
 
+#### Task 8: Fix frontend extension loading contract
+
+**Goal**: Ensure the package frontend JS is actually loaded by ComfyUI so the `load-video-url` preview extension can register at runtime.
+
+**Files**:
+
+- `__init__.py` (modify)
+- `src/main.ts` (modify)
+- generated frontend bundle files as needed
+
+**Steps**:
+
+1. Export the frontend web directory using the ComfyUI-supported package contract.
+2. Register the frontend extension through the documented `app` import rather than relying on a `window.app` lookup.
+3. Rebuild the frontend bundle and keep existing preview logic intact.
+
+**Verification**:
+
+- [ ] Package entrypoint exports the supported web-directory contract
+- [ ] Frontend entry uses documented extension registration pattern
+- [ ] Preview extension appears in live runtime registration after reload
+
+**Status**: 🔄 In Progress
+
+---
+
 ### Task Summary
 
 | Status         | Count | Tasks     |
 | -------------- | ----- | --------- |
 | ✅ Complete    | 8     | Tasks 0-7 |
-| 🔄 In Progress | 0     | -         |
+| 🔄 In Progress | 1     | Task 8    |
 | ⬜ Not Started | 0     | -         |
-| **Total**      | **8** | -         |
+| **Total**      | **9** | -         |
 
 ---
 
@@ -275,6 +301,7 @@ Use `VHS_LoadVideo` as a behavioral baseline only. Recreate the required load co
 | 2026-04-11 | Preview Requirement Clarification | ✅ PASS | User confirmed preview must play from a valid `video_url` before workflow execution; active plan reopened around frontend input preview |
 | 2026-04-11 | Input Preview Implementation | ✅ PASS | Added a `load-video-url` frontend extension with DOM video preview synced from the `video_url` widget |
 | 2026-04-11 | Input Preview Validation | ✅ PASS | Frontend build passed and static validation confirmed preview is callback-driven rather than execution-driven |
+| 2026-04-11 | Live Preview Investigation | ✅ PASS | Runtime inspection showed the node exists but the package frontend extension is not loaded or registered in ComfyUI |
 
 ---
 

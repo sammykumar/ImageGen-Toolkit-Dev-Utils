@@ -1,9 +1,10 @@
-const v = "load-video-url", m = "video_url_preview";
+import { app as m } from "../../../scripts/app.js";
+const v = "load-video-url", h = "video_url_preview", w = 320, y = 180;
 function p(e) {
   var r;
   return (r = e.widgets) == null ? void 0 : r.find((t) => t.name === "video_url");
 }
-function E(e) {
+function _(e) {
   if (typeof e != "string")
     return !1;
   const r = e.trim();
@@ -22,8 +23,8 @@ function d(e) {
   if (!r)
     return;
   const t = [
-    Math.max(r[0], 320),
-    Math.max(r[1], 300)
+    Math.max(r[0], w),
+    Math.max(r[1], y + 120)
   ];
   if (typeof e.setSize == "function") {
     e.setSize(t);
@@ -37,7 +38,7 @@ function f(e) {
   const r = document.createElement("div");
   r.style.display = "none", r.style.width = "100%", r.style.padding = "8px 0 0";
   const t = document.createElement("video");
-  t.controls = !0, t.autoplay = !0, t.loop = !0, t.muted = !0, t.playsInline = !0, t.preload = "metadata", t.style.width = "100%", t.style.maxHeight = "180px", t.style.display = "block", t.style.objectFit = "contain", t.style.background = "#111", t.style.borderRadius = "8px", r.append(t), e.addDOMWidget(m, "preview", r, {
+  t.controls = !0, t.autoplay = !0, t.loop = !0, t.muted = !0, t.playsInline = !0, t.preload = "metadata", t.style.width = "100%", t.style.maxHeight = `${y}px`, t.style.display = "block", t.style.objectFit = "contain", t.style.background = "#111", t.style.borderRadius = "8px", r.append(t), e.addDOMWidget(h, "preview", r, {
     serialize: !1,
     hideOnZoom: !1,
     getValue() {
@@ -48,7 +49,7 @@ function f(e) {
   });
   const o = () => {
     const s = p(e), l = (typeof (s == null ? void 0 : s.value) == "string" ? s.value : "").trim();
-    if (!E(l)) {
+    if (!_(l)) {
       r.style.display = "none", t.pause(), t.removeAttribute("src"), t.load(), d(e);
       return;
     }
@@ -69,8 +70,7 @@ function f(e) {
     cleanup: a
   }, o();
 }
-const y = window.app;
-y && y.registerExtension({
+m.registerExtension({
   name: "imagegen-toolkit-dev-utils.load-video-url-preview",
   beforeRegisterNodeDef(e, r) {
     if (r.name !== v)

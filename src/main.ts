@@ -1,3 +1,5 @@
+import { app } from '../../../scripts/app.js'
+
 type WidgetLike = {
 	name?: string
 	value?: unknown
@@ -42,10 +44,6 @@ type NodeTypeLike = {
 type ExtensionLike = {
 	name: string
 	beforeRegisterNodeDef?: (nodeType: NodeTypeLike, nodeData: NodeDefinitionLike) => void
-}
-
-type AppLike = {
-	registerExtension: (extension: ExtensionLike) => void
 }
 
 const TARGET_NODE_NAME = 'load-video-url'
@@ -189,30 +187,26 @@ function attachPreview(node: NodeLike) {
 	sync()
 }
 
-const app = (window as Window & { app?: AppLike }).app
-
-if (app) {
-	app.registerExtension({
-		name: 'imagegen-toolkit-dev-utils.load-video-url-preview',
-		beforeRegisterNodeDef(nodeType, nodeData) {
-			if (nodeData.name !== TARGET_NODE_NAME) {
-				return
-			}
-
-			const originalOnNodeCreated = nodeType.prototype.onNodeCreated
-			nodeType.prototype.onNodeCreated = function (...args: unknown[]) {
-				const result = originalOnNodeCreated?.apply(this, args)
-				attachPreview(this)
-				return result
-			}
-
-			const originalOnConfigure = nodeType.prototype.onConfigure
-			nodeType.prototype.onConfigure = function (...args: unknown[]) {
-				const result = originalOnConfigure?.apply(this, args)
-				attachPreview(this)
-				this.__loadVideoUrlPreviewState?.sync()
-				return result
-			}
+app.registerExtension({
+	name: 'imagegen-toolkit-dev-utils.load-video-url-preview',
+	beforeRegisterNodeDef(nodeType, nodeData) {
+		if (nodeData.name !== TARGET_NODE_NAME) {
+			return
 		}
-	})
-}
+
+		const originalOnNodeCreated = nodeType.prototype.onNodeCreated
+		nodeType.prototype.onNodeCreated = function (...args: unknown[]) {
+			const result = originalOnNodeCreated?.apply(this, args)
+			attachPreview(this)
+			return result
+		}
+
+		const originalOnConfigure = nodeType.prototype.onConfigure
+		nodeType.prototype.onConfigure = function (...args: unknown[]) {
+			const result = originalOnConfigure?.apply(this, args)
+			attachPreview(this)
+			this.__loadVideoUrlPreviewState?.sync()
+			return result
+		}
+	}
+})
