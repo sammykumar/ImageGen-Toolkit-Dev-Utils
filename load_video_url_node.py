@@ -369,24 +369,10 @@ class LoadVideoURL:
     def VALIDATE_INPUTS(
         cls,
         video_url,
-        force_rate=0,
-        custom_width=0,
-        custom_height=0,
-        frame_load_cap=0,
-        skip_first_frames=0,
-        select_every_nth=1,
         **kwargs,
     ):
         try:
             _normalize_video_url(video_url)
-            _coerce_video_controls(
-                force_rate,
-                custom_width,
-                custom_height,
-                frame_load_cap,
-                skip_first_frames,
-                select_every_nth,
-            )
         except ValueError as exc:
             return str(exc)
 

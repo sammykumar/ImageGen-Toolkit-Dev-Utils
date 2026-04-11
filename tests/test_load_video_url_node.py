@@ -1,4 +1,5 @@
 import importlib
+import inspect
 import pathlib
 import sys
 import tempfile
@@ -38,16 +39,7 @@ class LoadVideoURLNodeTests(unittest.TestCase):
             "video_url must be an absolute http or https URL",
         )
 
-    def test_validate_inputs_rejects_invalid_controls(self):
-        self.assertEqual(
-            module.LoadVideoURL.VALIDATE_INPUTS(
-                "https://example.com/video.mp4",
-                select_every_nth=0,
-            ),
-            "select_every_nth must be >= 1",
-        )
-
-    def test_validate_inputs_accepts_raw_prompt_scalars_and_zero_sentinels(self):
+    def test_validate_inputs_accepts_video_url_with_numeric_kwargs_ignored(self):
         self.assertTrue(
             module.LoadVideoURL.VALIDATE_INPUTS(
                 " https://example.com/video.mp4 ",
@@ -74,36 +66,23 @@ class LoadVideoURLNodeTests(unittest.TestCase):
             "video_url must be a string",
         )
 
-    def test_validate_inputs_reports_field_specific_integer_errors(self):
-        self.assertEqual(
+    def test_validate_inputs_signature_only_exposes_video_url_for_custom_validation(self):
+        signature = inspect.signature(module.LoadVideoURL.VALIDATE_INPUTS)
+        parameters = list(signature.parameters.values())
+
+        self.assertEqual([parameter.name for parameter in parameters], ["video_url", "kwargs"])
+        self.assertEqual(parameters[0].kind, inspect.Parameter.POSITIONAL_OR_KEYWORD)
+        self.assertEqual(parameters[1].kind, inspect.Parameter.VAR_KEYWORD)
+
+    def test_validate_inputs_does_not_report_numeric_field_errors(self):
+        self.assertTrue(
             module.LoadVideoURL.VALIDATE_INPUTS(
                 "https://example.com/video.mp4",
                 frame_load_cap="abc",
-            ),
-            "frame_load_cap must be an integer",
-        )
-
-    def test_validate_inputs_reports_non_frame_field_specific_errors(self):
-        self.assertEqual(
-            module.LoadVideoURL.VALIDATE_INPUTS(
-                "https://example.com/video.mp4",
                 custom_width="abc",
-            ),
-            "custom_width must be an integer",
-        )
-        self.assertEqual(
-            module.LoadVideoURL.VALIDATE_INPUTS(
-                "https://example.com/video.mp4",
                 skip_first_frames="abc",
-            ),
-            "skip_first_frames must be an integer",
-        )
-        self.assertEqual(
-            module.LoadVideoURL.VALIDATE_INPUTS(
-                "https://example.com/video.mp4",
-                select_every_nth="abc",
-            ),
-            "select_every_nth must be an integer",
+                select_every_nth="0",
+            )
         )
 
     def test_load_video_downloads_and_decodes_with_internal_helpers(self):
@@ -173,6 +152,17 @@ class LoadVideoURLNodeTests(unittest.TestCase):
             skip_first_frames=0,
             select_every_nth=2,
         )
+
+    def test_load_video_still_validates_numeric_controls_at_execution_time(self):
+        node = module.LoadVideoURL()
+
+        with self.assertRaises(ValueError) as exc_info:
+            node.load_video(
+                "https://example.com/video.mp4",
+                frame_load_cap="abc",
+            )
+
+        self.assertIn("frame_load_cap must be an integer", str(exc_info.exception))
 
     def test_input_types_rename_video_to_video_url(self):
         input_types = module.LoadVideoURL.INPUT_TYPES()

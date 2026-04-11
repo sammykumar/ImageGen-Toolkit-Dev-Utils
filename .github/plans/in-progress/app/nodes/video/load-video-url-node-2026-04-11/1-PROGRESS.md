@@ -379,6 +379,8 @@ Use `VHS_LoadVideo` as a behavioral baseline only. Recreate the required load co
 | 2026-04-11 | Live Preview Investigation | ✅ PASS | Runtime inspection showed the node exists but the package frontend extension is not loaded or registered in ComfyUI |
 | 2026-04-11 | Validation Contract Regression | ✅ PASS | Fixed raw prompt-value coercion, restored field-specific validation messages, and preserved VHS-style zero semantics |
 | 2026-04-11 | Validation Contract Retest | ✅ PASS | Focused backend suite passed with added regression coverage for non-collapsed field errors |
+| 2026-04-11 | Live Validation Root Cause | ✅ PASS | Confirmed ComfyUI fans one `VALIDATE_INPUTS` return value across every accepted argument, so multi-arg custom validators duplicate a single message onto all inputs |
+| 2026-04-11 | Validator Contract Alignment | ✅ PASS | Narrowed custom validation to `video_url` only and delegated numeric validation back to ComfyUI built-ins while keeping execution-time coercion |
 
 ---
 
