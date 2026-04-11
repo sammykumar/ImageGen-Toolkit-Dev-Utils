@@ -12,5 +12,6 @@
   },
   "scripts": {
     "build": "vite build"
-  }
+  },
+  "version": "0.0.1"
 }
