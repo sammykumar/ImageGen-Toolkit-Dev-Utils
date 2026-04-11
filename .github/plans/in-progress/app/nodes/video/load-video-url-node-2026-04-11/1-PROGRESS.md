@@ -13,17 +13,18 @@
 
 ### Goal
 
-Add a new ComfyUI node that preserves the same core functionality as `comfyui-videohelpersuite -> VHS_LoadVideo` and adds URL input so the video source can come from a remote location instead of only the local upload flow.
+Add a new ComfyUI node that preserves the same core functionality as `comfyui-videohelpersuite -> VHS_LoadVideo` and adds URL input so the video source can come from a remote location instead of only the local upload flow, without depending on VideoHelperSuite at runtime.
 
 ### Approach
 
-Use VideoHelperSuite `VHS_LoadVideo` as the baseline for outputs and load behavior, while replacing the upload-only source selection with a URL-capable source resolver. The backend URL resolution should borrow from the path-style loader behavior because that is where VHS already handles string paths and remote URLs.
+Use `VHS_LoadVideo` as a behavioral baseline only. Recreate the required load controls, remote resolution, and output contract inside this package so `Load Video URL` works even when VideoHelperSuite is not installed.
 
 ### Pre-Implementation Checklist
 
 - [x] Spec reviewed and approved (`3-SPEC.md`)
 - [x] Research findings validated (`2-RESEARCH.md`)
 - [x] Dependencies identified and available
+- [x] Clarified that VideoHelperSuite runtime dependency is not acceptable
 
 ### Implementation Tasks
 
@@ -160,14 +161,41 @@ Use VideoHelperSuite `VHS_LoadVideo` as the baseline for outputs and load behavi
 
 ---
 
+#### Task 5: Remove VideoHelperSuite runtime dependency
+
+**Goal**: Replace the current VHS delegation with internal loading logic that reproduces the needed `VHS_LoadVideo`-style behavior directly in this package.
+
+**Files**:
+
+- `load_video_url_node.py` (modify)
+- `README.md` (modify)
+- `tests/test_load_video_url_node.py` (modify)
+- supporting helper files to be added if needed
+
+**Steps**:
+
+1. Remove the dynamic import and runtime error path tied to `videohelpersuite.load_video_nodes`.
+2. Implement internal URL download/resolve and video loading behavior for the supported control surface.
+3. Update tests and docs so the node is described as self-contained rather than VHS-backed.
+
+**Verification**:
+
+- [x] Focused tests pass without stubbing or importing VideoHelperSuite
+- [x] Runtime error about missing `comfyui-videohelpersuite` is eliminated from the supported path
+- [x] Documentation no longer claims VideoHelperSuite is required
+
+**Status**: ✅ Complete
+
+---
+
 ### Task Summary
 
 | Status         | Count | Tasks     |
 | -------------- | ----- | --------- |
-| ✅ Complete    | 5     | Tasks 0-4 |
+| ✅ Complete    | 6     | Tasks 0-5 |
 | 🔄 In Progress | 0     | -         |
 | ⬜ Not Started | 0     | -         |
-| **Total**      | **5** | -         |
+| **Total**      | **6** | -         |
 
 ---
 
@@ -186,6 +214,9 @@ Use VideoHelperSuite `VHS_LoadVideo` as the baseline for outputs and load behavi
 | 2026-04-11 | Refactor Retest | ✅ PASS | Refactored layout passed unit, export, and diagnostics checks |
 | 2026-04-11 | Scaffold Cleanup | ✅ PASS | Obsolete shim and empty Vue component stubs removed; backend tests still pass |
 | 2026-04-11 | User Build Validation | ✅ PASS | Local `npm install` and `npm run build` succeeded; frontend package retained intentionally |
+| 2026-04-11 | Clarification Follow-up | ✅ PASS | Runtime dependency on VideoHelperSuite rejected; active plan reopened around self-contained implementation |
+| 2026-04-11 | Self-contained Reimplementation | ✅ PASS | Removed VideoHelperSuite runtime dependency, added internal cache/download/decode helpers, and updated docs/tests |
+| 2026-04-11 | Self-contained Validation | ✅ PASS | Focused tests passed and module import succeeded with VideoHelperSuite explicitly blocked |
 
 ---
 
@@ -351,6 +382,7 @@ None in the focused validation run.
 ### Notes
 
 - The implemented surface is proven for URL normalization, non-HTTP rejection, delegation to `LoadVideoPath`, input renaming to `video_url`, and package export wiring.
+- The current runtime error proves the previous implementation interpreted parity as delegation. The active correction is to recreate the baseline behavior internally instead.
 - Live ComfyUI execution with the real `comfyui-videohelpersuite` dependency and a real remote `.mp4` was not exercised in this environment.
 
 ---
@@ -537,6 +569,57 @@ None in the focused validation run.
 - [x] `npm install` completed locally
 - [x] `npm run build` completed locally
 - [x] Current empty frontend output is acceptable for the present backend-focused package state
+
+---
+
+## 2026-04-11 — Self-contained Reimplementation
+
+### Summary
+
+| Field       | Value |
+| ----------- | ----- |
+| Goal        | Remove the VideoHelperSuite runtime dependency and own the supported loading behavior in this package |
+| Scope       | `load_video_url_node.py`, `tests/test_load_video_url_node.py`, `README.md`, `pyproject.toml` |
+| Status      | ✅ PASS |
+| Owner       | vibe-flow (implemented via implement-agent) |
+
+### Changes
+
+| Area                  | Details |
+| --------------------- | ------- |
+| What changed          | - Removed the `videohelpersuite.load_video_nodes` import path<br>- Added internal URL validation, cache lookup, download, and decode helpers<br>- Rewrote tests around internal behavior<br>- Updated docs to describe the node as self-contained<br>- Added Python decode dependencies to `pyproject.toml` |
+| Notes / decisions     | - Kept the `video_url`-centered control surface intact<br>- Documented that audio output is currently `None` rather than pretending full parity |
+
+### Verification
+
+- [x] Focused implementation tests passed after the dependency-removal change
+- [x] Touched runtime, test, docs, and metadata files are diagnostics-clean
+
+---
+
+## 2026-04-11 — Self-contained Validation
+
+### Summary
+
+| Field       | Value |
+| ----------- | ----- |
+| Goal        | Prove the corrected requirement that `Load Video URL` no longer requires VideoHelperSuite |
+| Scope       | focused unit tests, import behavior with blocked VHS imports, touched documentation |
+| Status      | ✅ PASS |
+| Owner       | vibe-flow (summarizing test-agent results) |
+
+### Verification
+
+- [x] `python3 -m unittest tests.test_load_video_url_node` passed
+- [x] Importing `load_video_url_node` succeeded with `VideoHelperSuite` and `videohelpersuite` explicitly blocked
+- [x] `README.md` no longer describes VideoHelperSuite as required
+
+### Risks
+
+| Risk              | Impact | Likelihood | Mitigation              | Owner | Link |
+| ----------------- | ------ | ---------- | ----------------------- | ----- | ---- |
+| Real ComfyUI runtime may still expose decode-path edge cases | Medium | Medium | Run one live remote-video workflow in ComfyUI after dependency install | Team | - |
+| Audio output is not yet implemented | Medium | High | Treat as a follow-up capability slice, not a dependency-removal defect | Team | - |
 
 ---
 

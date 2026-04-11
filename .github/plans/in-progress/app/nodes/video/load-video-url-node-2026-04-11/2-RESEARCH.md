@@ -31,6 +31,7 @@ Allow ComfyUI users to load a video directly from a URL so remote assets can be 
 - Must fit the current repo shape: one Python custom node surface plus a Vite/Vue frontend bundle.
 - Should avoid unnecessary frontend complexity if a native string widget is sufficient.
 - Must not assume unrestricted remote fetching without validation and clear failure behavior.
+- Must not require `comfyui-videohelpersuite` to be installed at runtime.
 
 ---
 
@@ -97,24 +98,24 @@ graph LR
 | Approach             | Principles Alignment | Pros                                | Cons                                | Risks        | Est. Effort  | Recommendation |
 | -------------------- | -------------------- | ----------------------------------- | ----------------------------------- | ------------ | ------------ | -------------- |
 | **A. Clone Upload Node Literally** | Medium                 | - Familiar baseline<br>- Similar user intent | - Upload concerns do not solve URL entry<br>- Would require bolting URL logic onto file-enumeration flow | Medium | 1-2 days | ⚠️ Consider |
-| **B. New URL Node Using Path-Style Resolution** | High                 | - Matches requested input contract<br>- Preserves `VHS_LoadVideo` behavior<br>- Aligns with existing VHS URL handling<br>- Keeps backend responsibilities clear | - Still needs download/cache policy | Medium | 1-2 days | ✅ RECOMMENDED |
+| **B. New self-contained URL node with internal parity** | High                 | - Matches requested input contract<br>- Preserves `VHS_LoadVideo` behavior goals<br>- Removes runtime dependency on VideoHelperSuite<br>- Keeps package self-contained | - Requires internal loader implementation and tests | Medium | 1-2 days | ✅ RECOMMENDED |
 | **C. Browser Fetch Then Re-upload** | Low                  | - Keeps Python path simple | - Adds frontend complexity<br>- Cross-origin and large-file issues<br>- Duplicates upload pipeline | High | 2-4 days | ❌ Reject |
 
 ### Detailed Analysis
 
-#### Approach B: New URL Node Using Path-Style Resolution ⭐ RECOMMENDED
+#### Approach B: New self-contained URL node with internal parity ⭐ RECOMMENDED
 
-**Description**: Create a dedicated URL node whose backend accepts a string input and resolves remote URLs before delegating to the actual video loading logic, while borrowing the upload node's overall node behavior and possibly its UX cues.
+**Description**: Create a dedicated URL node whose backend accepts a string input and resolves remote URLs using internal helpers, then loads video frames directly inside this package while preserving the needed `VHS_LoadVideo`-style interface.
 
 **Technical Considerations**:
 
-- VHS `LoadVideoPath` and `LoadVideoFFmpegPath` already validate string paths and call a download helper when the value is a URL.
-- `VHS_LoadVideo` itself maps to `LoadVideoUpload`, which is the non-ffmpeg upload baseline the user pointed to.
-- This approach keeps input semantics separate from decode semantics and makes caching/error handling easier to reason about.
+- `VHS_LoadVideo` remains the user-facing baseline for controls and output shape.
+- The current local implementation still imports `videohelpersuite.load_video_nodes`, which is the direct cause of the runtime failure.
+- The corrected design should keep input semantics separate from decode semantics, but own both responsibilities in this package.
 
 **Why Recommended**:
 
-It matches the requested user behavior while preserving `VHS_LoadVideo` as the behavioral baseline and reusing the right proven helper behavior from VideoHelperSuite for URL-aware resolution.
+It matches the requested user behavior while preserving `VHS_LoadVideo` as the behavioral baseline and removing the runtime dependency that is currently breaking execution.
 
 ---
 
@@ -151,9 +152,9 @@ It matches the requested user behavior while preserving `VHS_LoadVideo` as the b
 
 ### POC Results
 
-**Test**: Source-level comparison of local repo surfaces and VideoHelperSuite baseline behavior  
+**Test**: Source-level comparison of the shipped implementation against the clarified requirement  
 **Result**: ✅ Success  
-**Finding**: The correct technical baseline is a hybrid: `VHS_LoadVideo` for parity, `LoadVideoPath` for URL handling.
+**Finding**: The current node still delegates to VideoHelperSuite and raises when it is missing, so the next implementation slice must replace delegation with internal behavior.
 
 ---
 
@@ -171,28 +172,28 @@ It matches the requested user behavior while preserving `VHS_LoadVideo` as the b
 
 ### Selected Approach
 
-**Approach B: New URL Node Using Path-Style Resolution**
+**Approach B: New self-contained URL node with internal parity**
 
 ### Rationale
 
-This best matches the requested behavior, aligns with the simplest reliable backend model, and lets the frontend remain minimal unless the user explicitly wants a richer Vue-powered URL entry experience.
+This best matches the requested behavior, removes the failing dependency edge, and still lets the frontend remain minimal unless the user explicitly wants a richer Vue-powered URL entry experience.
 
 ### Trade-offs Accepted
 
-- A small amount of custom backend resolver logic is preferable to forcing URL behavior through upload plumbing.
-- Full parity with all VHS outputs may require a second pass if the first implementation focuses only on image frames.
+- A small amount of custom backend loader logic is preferable to shipping a node that hard-fails without another package.
+- Full parity with all VHS outputs may still require staged validation in real ComfyUI runtime.
 
 ### Next Steps
 
 1. ✅ Research complete → Create `3-SPEC.md`
-2. ⏭️ Confirm required output parity: image-only or image-plus-audio/video-info
-3. ⏭️ Proceed to implementation planning and task execution when approved
+2. ✅ Clarified that VideoHelperSuite delegation is not acceptable
+3. ⏭️ Replace the delegation-based implementation with internal loading logic
 
 ---
 
 ## 8. Open Questions
 
-- [ ] Should the first version match all `VHS_LoadVideo` outputs immediately, or stage image-only parity first and add full parity next?
+- [ ] Should the self-contained implementation match all `VHS_LoadVideo` outputs immediately, or stage image-only parity first and add full parity next?
 - [ ] Should remote files be cached under Comfy input, temp, or a node-specific cache directory?
 - [x] ~~Is `VHS_LoadVideo` the ffmpeg variant?~~ - Answer: No. `VHS_LoadVideo` maps to `LoadVideoUpload`; the ffmpeg upload node is `VHS_LoadVideoFFmpeg`.
 

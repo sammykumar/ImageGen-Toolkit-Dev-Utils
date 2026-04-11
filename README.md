@@ -1,16 +1,17 @@
 # ImageGen Toolkit Dev Utils
 (Important: Make sure to install this latest version of ComfyUI Frontend - **1.24.4**!!!)
 
-A focused ComfyUI custom node pack that provides a VideoHelperSuite-compatible remote video URL loader.
+A focused ComfyUI custom node pack that provides a self-contained remote video URL loader for ComfyUI workflows.
 
 ## Overview
 
-ImageGen Toolkit Dev Utils currently ships a single backend node, `Load Video URL`, which accepts a remote `http` or `https` video URL and delegates decoding to comfyui-videohelpersuite's non-ffmpeg `VHS_LoadVideo` path loader behavior.
+ImageGen Toolkit Dev Utils currently ships a single backend node, `Load Video URL`, which accepts a remote `http` or `https` video URL, caches the remote asset locally, and decodes frames inside this package without requiring VideoHelperSuite.
 
 ## Features
 
-- `Load Video URL`, a small adapter node that reuses comfyui-videohelpersuite `VHS_LoadVideo` path-loading behavior for remote `http` and `https` video URLs
-- Clear validation for blank or non-HTTP(S) inputs before delegation
+- `Load Video URL`, a self-contained node for remote `http` and `https` video URLs
+- Clear validation for blank or non-HTTP(S) inputs before download and decode
+- URL-addressed cache reuse for repeated executions of the same remote asset
 - Package entrypoint exports only the supported node mappings
 
 ## Installation
@@ -22,11 +23,11 @@ This demonstration node is not designed to be installed directly via **git clone
 - ComfyUI Manager
 - ComfyUI Registry
 
-### Additional dependency for `Load Video URL`
+### Runtime requirements for `Load Video URL`
 
-The new `Load Video URL` node intentionally targets parity with comfyui-videohelpersuite `VHS_LoadVideo` and delegates to VideoHelperSuite's non-ffmpeg path loader.
+`Load Video URL` no longer imports or delegates to VideoHelperSuite.
 
-Install comfyui-videohelpersuite alongside this package if you want to use that node. If VideoHelperSuite is missing, `Load Video URL` will raise a clear runtime error instead of silently falling back to a different decoder path.
+The node expects the normal ComfyUI Python runtime plus this package's Python dependencies, including `imageio[ffmpeg]` and `Pillow`, so it can download, cache, and decode the remote asset internally.
 
 ## Development Setup
 If you want to modify this custom node locally, use the following setup:
@@ -51,16 +52,18 @@ If you want to modify this custom node locally, use the following setup:
 
 After installation:
 
-1. Add the "Load Video URL" node under `video`
+1. Add the "Load Video URL" node under `ImageGen Toolkit Dev Utils/video`
 2. Paste a direct `http` or `https` video URL into the `video_url` field
-3. Adjust `force_rate`, `frame_load_cap`, `skip_first_frames`, `select_every_nth`, and optional `vae` the same way you would with the VideoHelperSuite baseline node
-4. Execute the workflow to download or reuse the cached remote asset through VideoHelperSuite's existing path loader behavior
+3. Adjust `force_rate`, `frame_load_cap`, `skip_first_frames`, `select_every_nth`, optional `custom_width`, `custom_height`, and optional `vae` the same way you would with the current node surface
+4. Execute the workflow to download or reuse the cached remote asset and decode frames locally inside this package
 
 Notes:
 
-- This node targets the non-ffmpeg `VHS_LoadVideo` behavior, not `VHS_LoadVideoFFmpeg`
+- This node keeps the `video_url`-centered control surface aligned with the current `VHS_LoadVideo`-style contract as closely as practical, but it does not require VideoHelperSuite at runtime
 - The input is intentionally a plain string widget
-- Invalid, blank, or non-HTTP(S) URLs are rejected before the delegate loader runs
+- Invalid, blank, or non-HTTP(S) URLs are rejected before any network fetch occurs
+- Remote files are cached by URL hash under the ComfyUI temp directory when available, or the system temp directory otherwise
+- The current implementation returns decoded image frames, frame count, and metadata; audio extraction is not implemented yet and the audio output is `None`
 
 ## Contributing
 

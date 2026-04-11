@@ -14,7 +14,7 @@
 
 The current repo demonstrates a custom ComfyUI node with a Vue widget, but it does not provide a way to load video from a remote URL. Users who already have hosted media must upload it manually before it can enter a workflow.
 
-This work is intended to preserve the same core behavior as `comfyui-videohelpersuite -> VHS_LoadVideo` and add URL input as an additional source mechanism.
+This work is intended to preserve the same core behavior as `comfyui-videohelpersuite -> VHS_LoadVideo` and add URL input as an additional source mechanism, without requiring VideoHelperSuite to be installed.
 
 ### User Impact
 
@@ -25,6 +25,7 @@ Users can point the node at a remote asset directly, which reduces friction for 
 - [ ] A new node accepts a remote video URL as input.
 - [ ] The node returns a baseline-compatible video frame output for downstream nodes.
 - [ ] Invalid or unreachable URLs fail with clear error messages.
+- [ ] The node does not import or require VideoHelperSuite at runtime.
 
 ### Scope
 
@@ -45,7 +46,7 @@ Users can point the node at a remote asset directly, which reduces friction for 
 
 ### What are we building?
 
-A new ComfyUI custom node that takes a video URL, resolves it into a locally usable asset, and loads frames with the same core behavior and controls as `VHS_LoadVideo`.
+A new ComfyUI custom node that takes a video URL, resolves it into a locally usable asset, and loads frames with the same core behavior and controls as `VHS_LoadVideo`, implemented directly in this package.
 
 ### Why?
 
@@ -125,7 +126,13 @@ sequenceDiagram
 - **Alternatives Considered**: Directly cloning upload code.
 - **Trade-offs**: Requires selective reuse rather than direct copy.
 
-**Decision 3**: Target `VHS_LoadVideo`, not `VHS_LoadVideoFFmpeg`
+**Decision 3**: Remove runtime delegation to VideoHelperSuite
+
+- **Rationale**: The user explicitly wants recreated behavior, not a transitive runtime dependency.
+- **Alternatives Considered**: Keeping the current `videohelpersuite.load_video_nodes.LoadVideoPath` import path.
+- **Trade-offs**: Internal loader code and test coverage must now live in this package.
+
+**Decision 4**: Target `VHS_LoadVideo`, not `VHS_LoadVideoFFmpeg`
 
 - **Rationale**: `VHS_LoadVideo` is the exact node the user named, and in VideoHelperSuite it maps to `LoadVideoUpload`, the non-ffmpeg upload variant.
 - **Alternatives Considered**: Using the ffmpeg variant as the first parity target.
@@ -224,14 +231,14 @@ No database changes are planned.
 
 1. Implement URL validation and scheme restrictions.
 2. Download or cache remote files to a local path.
-3. Delegate into the actual video loading routine.
+3. Implement the actual video loading routine internally.
 4. Return actionable errors for invalid inputs.
 
 **Deliverables**:
 
 - [ ] Resolver helper
 - [ ] Remote download path
-- [ ] Decode integration
+- [ ] Internal decode integration
 - [ ] Error handling
 
 **Estimated Effort**: 0.5-1.5 days
@@ -274,7 +281,7 @@ No database changes are planned.
 | `ComfyUIFEExampleVueBasic.py` | Current node backend | Add or factor out new video URL node | 🟡 Med |
 | `__init__.py` | Node export/registration | Export new node mapping | 🟢 Low |
 | `src/main.ts` | Frontend extension | Add widget registration if needed | 🟡 Med |
-| `README.md` | User documentation | Add node usage and limitations | 🟢 Low |
+| `README.md` | User documentation | Remove VHS dependency claim and add self-contained usage notes | 🟢 Low |
 
 ### Files to Delete
 
@@ -302,9 +309,9 @@ No database changes are planned.
 
 ### Breaking Changes
 
-#### Change 1: New node added without replacing the example node
+#### Change 1: `Load Video URL` becomes self-contained rather than VHS-backed
 
-**Impact**: Existing example workflows should remain intact.
+**Impact**: Users no longer need VideoHelperSuite installed for the supported path.
 
 **Before**:
 
