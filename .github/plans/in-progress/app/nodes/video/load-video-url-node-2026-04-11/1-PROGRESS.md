@@ -266,14 +266,39 @@ Use `VHS_LoadVideo` as a behavioral baseline only. Recreate the required load co
 
 ---
 
+#### Task 9: Add frontend build identity logging
+
+**Goal**: Log the installed frontend build identity to the browser console so nightly debugging can confirm which commit hash is actually loaded before diagnosing runtime behavior.
+
+**Files**:
+
+- `vite.config.mts` (modify)
+- `src/main.ts` (modify)
+
+**Steps**:
+
+1. Inject git-derived build metadata into the frontend bundle at build time.
+2. Log the commit hash and related build identity once when the extension module loads.
+3. Keep the logging safe when git metadata is unavailable by falling back to explicit placeholder values.
+
+**Verification**:
+
+- [ ] Frontend bundle contains injected build metadata
+- [ ] Console logging happens from the extension entrypoint without breaking build output
+- [ ] `npm run build` still passes
+
+**Status**: 🔄 In Progress
+
+---
+
 ### Task Summary
 
 | Status         | Count | Tasks     |
 | -------------- | ----- | --------- |
 | ✅ Complete    | 8     | Tasks 0-7 |
-| 🔄 In Progress | 1     | Task 8    |
+| 🔄 In Progress | 2     | Tasks 8-9 |
 | ⬜ Not Started | 0     | -         |
-| **Total**      | **9** | -         |
+| **Total**      | **10** | -         |
 
 ---
 

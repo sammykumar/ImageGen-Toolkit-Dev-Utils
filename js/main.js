@@ -1,10 +1,12 @@
-import { app as m } from "../../../scripts/app.js";
-const v = "load-video-url", h = "video_url_preview", w = 320, y = 180;
+import { app as v } from "../../../scripts/app.js";
+var _ = { commitHash: "3acff040f762", packageVersion: "0.0.4" };
+const h = "load-video-url", E = "video_url_preview", w = 320, y = 180, m = "imagegen-toolkit-dev-utils.load-video-url-preview";
+console.info(`[${m}] build`, _);
 function p(e) {
   var r;
   return (r = e.widgets) == null ? void 0 : r.find((t) => t.name === "video_url");
 }
-function _(e) {
+function N(e) {
   if (typeof e != "string")
     return !1;
   const r = e.trim();
@@ -38,7 +40,7 @@ function f(e) {
   const r = document.createElement("div");
   r.style.display = "none", r.style.width = "100%", r.style.padding = "8px 0 0";
   const t = document.createElement("video");
-  t.controls = !0, t.autoplay = !0, t.loop = !0, t.muted = !0, t.playsInline = !0, t.preload = "metadata", t.style.width = "100%", t.style.maxHeight = `${y}px`, t.style.display = "block", t.style.objectFit = "contain", t.style.background = "#111", t.style.borderRadius = "8px", r.append(t), e.addDOMWidget(h, "preview", r, {
+  t.controls = !0, t.autoplay = !0, t.loop = !0, t.muted = !0, t.playsInline = !0, t.preload = "metadata", t.style.width = "100%", t.style.maxHeight = `${y}px`, t.style.display = "block", t.style.objectFit = "contain", t.style.background = "#111", t.style.borderRadius = "8px", r.append(t), e.addDOMWidget(E, "preview", r, {
     serialize: !1,
     hideOnZoom: !1,
     getValue() {
@@ -49,7 +51,7 @@ function f(e) {
   });
   const o = () => {
     const s = p(e), l = (typeof (s == null ? void 0 : s.value) == "string" ? s.value : "").trim();
-    if (!_(l)) {
+    if (!N(l)) {
       r.style.display = "none", t.pause(), t.removeAttribute("src"), t.load(), d(e);
       return;
     }
@@ -70,10 +72,10 @@ function f(e) {
     cleanup: a
   }, o();
 }
-m.registerExtension({
-  name: "imagegen-toolkit-dev-utils.load-video-url-preview",
+v.registerExtension({
+  name: m,
   beforeRegisterNodeDef(e, r) {
-    if (r.name !== v)
+    if (r.name !== h)
       return;
     const t = e.prototype.onNodeCreated;
     e.prototype.onNodeCreated = function(...a) {

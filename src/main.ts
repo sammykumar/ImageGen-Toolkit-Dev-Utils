@@ -1,5 +1,10 @@
 import { app } from '../../../scripts/app.js'
 
+declare const __IMAGEGEN_TOOLKIT_BUILD_INFO__: {
+	commitHash: string
+	packageVersion: string
+}
+
 type WidgetLike = {
 	name?: string
 	value?: unknown
@@ -50,6 +55,9 @@ const TARGET_NODE_NAME = 'load-video-url'
 const PREVIEW_WIDGET_NAME = 'video_url_preview'
 const MIN_NODE_WIDTH = 320
 const PREVIEW_HEIGHT = 180
+const EXTENSION_NAME = 'imagegen-toolkit-dev-utils.load-video-url-preview'
+
+console.info(`[${EXTENSION_NAME}] build`, __IMAGEGEN_TOOLKIT_BUILD_INFO__)
 
 function getVideoUrlWidget(node: NodeLike): WidgetLike | undefined {
 	return node.widgets?.find((widget) => widget.name === 'video_url')
@@ -188,7 +196,7 @@ function attachPreview(node: NodeLike) {
 }
 
 app.registerExtension({
-	name: 'imagegen-toolkit-dev-utils.load-video-url-preview',
+	name: EXTENSION_NAME,
 	beforeRegisterNodeDef(nodeType, nodeData) {
 		if (nodeData.name !== TARGET_NODE_NAME) {
 			return
