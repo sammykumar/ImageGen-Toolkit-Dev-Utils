@@ -31,6 +31,131 @@ class WorkflowImportBridgeTests(unittest.TestCase):
 			"/api/image-gen-toolkit/workflows/importable/content",
             routes.handlers,
         )
+        self.assertIn(
+            "/api/image-gen-toolkit/workflows/published-api",
+            routes.handlers,
+        )
+
+    def test_publish_route_stores_export_keyed_by_source_identity(self):
+        routes = _FakeRoutes()
+        module = _import_bridge_with_route_stubs(routes)
+        handler = routes.handlers["/api/image-gen-toolkit/workflows/published-api"]
+
+        workflow = {
+            "nodes": [
+                {
+                    "id": 1,
+                    "type": "KSampler",
+                    "mode": 0,
+                    "inputs": [{"name": "seed", "type": "INT", "widget": {"name": "seed"}}],
+                    "widgets_values": [42],
+                }
+            ],
+            "links": [],
+        }
+        api_prompt = {"1": {"class_type": "KSampler", "inputs": {"seed": 42}}}
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            userdata_root = pathlib.Path(temp_dir) / "default"
+            with mock.patch.object(module, "_get_userdata_root", return_value=userdata_root):
+                response = asyncio.run(
+                    handler(
+                        _FakePostRequest(
+                            {
+                                "sourceKind": "userdata_file",
+                                "sourceId": "workflows/my-workflow.json",
+                                "workflow": workflow,
+                                "apiPrompt": api_prompt,
+                            }
+                        )
+                    )
+                )
+
+            self.assertEqual(response["status"], 200)
+            self.assertTrue(response["payload"]["ok"])
+            self.assertIn("workflowHash", response["payload"])
+
+            # Verify the published export can be found by source identity
+            record = module.ImportableWorkflowRecord(
+                source_kind="userdata_file",
+                source_id="workflows/my-workflow.json",
+                display_name="my-workflow.json",
+                file_path=pathlib.Path(temp_dir) / "workflows" / "my-workflow.json",
+            )
+            with mock.patch.object(module, "_get_userdata_root", return_value=userdata_root):
+                found = module._load_published_api_export_for_record(record)
+
+        self.assertIsNotNone(found)
+        self.assertEqual(found["apiPrompt"], api_prompt)
+
+    def test_publish_route_returns_400_when_source_identity_missing(self):
+        routes = _FakeRoutes()
+        module = _import_bridge_with_route_stubs(routes)
+        handler = routes.handlers["/api/image-gen-toolkit/workflows/published-api"]
+
+        workflow = {"nodes": [], "links": []}
+        api_prompt = {"1": {"class_type": "KSampler", "inputs": {}}}
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            userdata_root = pathlib.Path(temp_dir) / "default"
+            with mock.patch.object(module, "_get_userdata_root", return_value=userdata_root):
+                response = asyncio.run(
+                    handler(
+                        _FakePostRequest(
+                            {
+                                "workflow": workflow,
+                                "apiPrompt": api_prompt,
+                            }
+                        )
+                    )
+                )
+
+        self.assertEqual(response["status"], 400)
+        self.assertEqual(response["payload"], {"error": "sourceKind and sourceId are required"})
+
+    def test_get_importable_workflow_content_uses_published_export_when_available(self):
+        module = importlib.import_module("workflow_import_bridge")
+
+        workflow_json = {
+            "nodes": [
+                {
+                    "id": 50,
+                    "type": "RandomNoise",
+                    "mode": 0,
+                    "inputs": [],
+                    "widgets_values": [42, "fixed", True],
+                }
+            ],
+            "links": [],
+        }
+        # Frontend-exported api_prompt that the Python bridge cannot reconstruct
+        api_prompt = {"50": {"class_type": "RandomNoise", "inputs": {"noise_seed": 42, "noise_type": "fixed"}}}
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            userdata_root = pathlib.Path(temp_dir) / "default"
+            workflows_dir = userdata_root / "workflows"
+            workflows_dir.mkdir(parents=True, exist_ok=True)
+            (workflows_dir / "random-noise.json").write_text(
+                json.dumps(workflow_json),
+                encoding="utf-8",
+            )
+
+            # Pre-publish the frontend export
+            with mock.patch.object(module, "_get_userdata_root", return_value=userdata_root):
+                module.publish_frontend_api_export(
+                    "userdata_file",
+                    "workflows/random-noise.json",
+                    workflow_json,
+                    api_prompt,
+                )
+                result = module.get_importable_workflow_content(
+                    "userdata_file",
+                    "workflows/random-noise.json",
+                )
+
+        self.assertEqual(result["workflow"], api_prompt)
+        self.assertEqual(result["runtimeFormat"], "api_prompt")
+        self.assertEqual(result["provenance"]["source"], "frontend_publish")
 
     def test_list_importable_workflows_returns_individually_selectable_catalog(self):
         module = importlib.import_module("workflow_import_bridge")
@@ -122,6 +247,7 @@ class WorkflowImportBridgeTests(unittest.TestCase):
                 "originalFormat": "api_prompt",
                 "runtimeFormat": "api_prompt",
                 "conversion": {"performed": False},
+                "provenance": {"source": "source_api_prompt"},
             },
         )
 
@@ -769,11 +895,26 @@ class _FakeRequest:
         self.rel_url = types.SimpleNamespace(query=query)
 
 
+class _FakePostRequest:
+    def __init__(self, body):
+        self._body = body
+
+    async def json(self):
+        return self._body
+
+
 class _FakeRoutes:
     def __init__(self):
         self.handlers = {}
 
     def get(self, path):
+        def decorator(handler):
+            self.handlers[path] = handler
+            return handler
+
+        return decorator
+
+    def post(self, path):
         def decorator(handler):
             self.handlers[path] = handler
             return handler

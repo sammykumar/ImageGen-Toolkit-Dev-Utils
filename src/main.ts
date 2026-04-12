@@ -109,7 +109,50 @@ async function readErrorDetail(response: Response): Promise<string> {
 	return body.trim()
 }
 
+type ActiveWorkflowLike = {
+	path?: string | null
+	key?: string | null
+	name?: string | null
+}
+
+type WorkflowManagerLike = {
+	activeWorkflow?: ActiveWorkflowLike | null
+}
+
+type WorkflowSource = {
+	sourceKind: string
+	sourceId: string
+}
+
+function getActiveWorkflowSource(): WorkflowSource | null {
+	const workflowManager = (
+		app as typeof app & { workflowManager?: WorkflowManagerLike }
+	).workflowManager
+	const rawPath = workflowManager?.activeWorkflow?.path
+	if (typeof rawPath !== 'string' || !rawPath.trim()) {
+		return null
+	}
+	const cleanPath = rawPath.replace(/^\/+/, '').trim()
+	if (!cleanPath) {
+		return null
+	}
+	// Bridge sourceId for userdata_file is relative to userdata root: "workflows/{path}"
+	const sourceId = cleanPath.startsWith('workflows/') ? cleanPath : `workflows/${cleanPath}`
+	return { sourceKind: 'userdata_file', sourceId }
+}
+
 async function publishCurrentGraphApiExport() {
+	const source = getActiveWorkflowSource()
+	if (!source) {
+		app.extensionManager.toast.add({
+			severity: 'warn',
+			summary: 'Cannot Publish Export(API)',
+			detail: 'Open a saved workflow file first (Workflow > Open), then publish.',
+			life: 8000
+		})
+		return
+	}
+
 	const result = (await app.graphToPrompt()) as GraphToPromptResult
 	const response = await app.api.fetchApi(PUBLISH_API_PATH, {
 		method: 'POST',
@@ -117,6 +160,8 @@ async function publishCurrentGraphApiExport() {
 			'Content-Type': 'application/json'
 		},
 		body: JSON.stringify({
+			sourceKind: source.sourceKind,
+			sourceId: source.sourceId,
 			workflow: result.workflow,
 			apiPrompt: result.output
 		})

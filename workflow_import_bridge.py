@@ -352,7 +352,7 @@ def _build_fetch_payload(record: ImportableWorkflowRecord, workflow: Any) -> dic
         runtime_format = "api_prompt"
         provenance = {"source": "source_api_prompt"}
     elif original_format == "workflow_json":
-        published_api_export = _load_published_api_export(workflow)
+        published_api_export = _load_published_api_export_for_record(record)
         if published_api_export is not None:
             runtime_workflow = published_api_export["apiPrompt"]
             warnings = [
@@ -529,13 +529,14 @@ def _get_published_api_exports_root() -> Path:
     return _get_userdata_root() / PUBLISHED_API_EXPORTS_PREFIX
 
 
-def _get_published_api_export_path(workflow_hash: str) -> Path:
-    return _get_published_api_exports_root() / f"{workflow_hash}.json"
+def _get_published_api_export_path_for_source(source_kind: str, source_id: str) -> Path:
+    source_key = f"{source_kind}:{source_id}"
+    source_hash = hashlib.sha256(source_key.encode("utf-8")).hexdigest()
+    return _get_published_api_exports_root() / f"{source_hash}.json"
 
 
-def _load_published_api_export(workflow: Any) -> dict[str, Any] | None:
-    workflow_hash = _compute_workflow_hash(workflow)
-    file_path = _get_published_api_export_path(workflow_hash)
+def _load_published_api_export_for_record(record: ImportableWorkflowRecord) -> dict[str, Any] | None:
+    file_path = _get_published_api_export_path_for_source(record.source_kind, record.source_id)
     if not file_path.is_file():
         return None
 
@@ -555,11 +556,18 @@ def _load_published_api_export(workflow: Any) -> dict[str, Any] | None:
     return {
         "apiPrompt": api_prompt,
         "publishedAt": published_at,
-        "workflowHash": workflow_hash,
+        "workflowHash": payload.get("workflowHash") or "",
     }
 
 
-def publish_frontend_api_export(workflow: Any, api_prompt: Any) -> dict[str, Any]:
+def publish_frontend_api_export(
+    source_kind: str,
+    source_id: str,
+    workflow: Any,
+    api_prompt: Any,
+) -> dict[str, Any]:
+    if not source_kind or not source_id:
+        raise ValueError("sourceKind and sourceId are required")
     if not isinstance(workflow, dict) or _detect_format_hint(workflow) != "workflow_json":
         raise ValueError("workflow must be a workflow_json object")
     if not isinstance(api_prompt, dict) or _detect_format_hint(api_prompt) != "api_prompt":
@@ -568,13 +576,15 @@ def publish_frontend_api_export(workflow: Any, api_prompt: Any) -> dict[str, Any
     workflow_hash = _compute_workflow_hash(workflow)
     published_at = datetime.now(tz=timezone.utc).isoformat().replace("+00:00", "Z")
     payload = {
+        "sourceKind": source_kind,
+        "sourceId": source_id,
         "workflowHash": workflow_hash,
         "publishedAt": published_at,
         "workflow": workflow,
         "apiPrompt": api_prompt,
     }
 
-    destination = _get_published_api_export_path(workflow_hash)
+    destination = _get_published_api_export_path_for_source(source_kind, source_id)
     destination.parent.mkdir(parents=True, exist_ok=True)
     destination.write_text(json.dumps(payload, indent=2), encoding="utf-8")
 
@@ -745,11 +755,19 @@ def _register_routes() -> None:
                 status=400,
             )
 
+        source_kind = payload.get("sourceKind") if isinstance(payload, dict) else None
+        source_id = payload.get("sourceId") if isinstance(payload, dict) else None
         workflow = payload.get("workflow") if isinstance(payload, dict) else None
         api_prompt = payload.get("apiPrompt") if isinstance(payload, dict) else None
 
+        if not source_kind or not source_id:
+            return web.json_response(
+                {"error": "sourceKind and sourceId are required"},
+                status=400,
+            )
+
         try:
-            publish_result = publish_frontend_api_export(workflow, api_prompt)
+            publish_result = publish_frontend_api_export(source_kind, source_id, workflow, api_prompt)
         except ValueError as exc:
             return web.json_response({"error": str(exc)}, status=400)
         except OSError as exc:
