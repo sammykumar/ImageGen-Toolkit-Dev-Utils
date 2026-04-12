@@ -567,6 +567,128 @@ class WorkflowImportBridgeTests(unittest.TestCase):
         self.assertEqual(result["conversion"], {"performed": True})
         self.assertEqual(result["summary"]["formatHint"], "workflow_json")
 
+    def test_get_importable_workflow_content_omits_frontend_only_note_nodes(self):
+        module = importlib.import_module("workflow_import_bridge")
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            userdata_root = pathlib.Path(temp_dir) / "default"
+            workflows_dir = userdata_root / "workflows"
+            workflows_dir.mkdir(parents=True, exist_ok=True)
+            (workflows_dir / "editor-export.json").write_text(
+                json.dumps(
+                    {
+                        "nodes": [
+                            {
+                                "id": 1,
+                                "title": "Load Image",
+                                "type": "LoadImage",
+                                "mode": 0,
+                                "inputs": [
+                                    {
+                                        "name": "image",
+                                        "type": "STRING",
+                                        "widget": {"name": "image"},
+                                    }
+                                ],
+                                "widgets_values": ["input.png"],
+                            },
+                            {
+                                "id": 99,
+                                "title": "Workflow Notes",
+                                "type": "MarkdownNote",
+                                "mode": 0,
+                                "inputs": [
+                                    {
+                                        "name": "text",
+                                        "type": "STRING",
+                                        "widget": {"name": "text"},
+                                    }
+                                ],
+                                "widgets_values": ["Use the default image input."],
+                            },
+                            {
+                                "id": 2,
+                                "title": "Save Image",
+                                "type": "SaveImage",
+                                "mode": 0,
+                                "inputs": [
+                                    {
+                                        "name": "images",
+                                        "type": "IMAGE",
+                                        "link": 10,
+                                    },
+                                    {
+                                        "name": "filename_prefix",
+                                        "type": "STRING",
+                                        "widget": {"name": "filename_prefix"},
+                                    },
+                                ],
+                                "widgets_values": ["ComfyUI"],
+                            },
+                        ],
+                        "links": [[10, 1, 0, 2, 0, "IMAGE"]],
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            with mock.patch.object(module, "_get_userdata_root", return_value=userdata_root):
+                result = module.get_importable_workflow_content(
+                    "userdata_file",
+                    "workflows/editor-export.json",
+                )
+
+        self.assertEqual(set(result["workflow"].keys()), {"1", "2"})
+        self.assertNotIn("99", result["workflow"])
+        self.assertEqual(result["workflow"]["2"]["inputs"]["images"], ["1", 0])
+
+    def test_convert_workflow_json_prunes_inputs_targeting_removed_note_nodes(self):
+        module = importlib.import_module("workflow_import_bridge")
+
+        workflow = {
+            "nodes": [
+                {
+                    "id": 5,
+                    "title": "Pinned Notes",
+                    "type": "Note",
+                    "mode": 0,
+                    "outputs": [{"name": "text", "type": "STRING", "links": [20]}],
+                    "widgets_values": ["Editor only"],
+                },
+                {
+                    "id": 6,
+                    "title": "Consumer",
+                    "type": "CLIPTextEncode",
+                    "mode": 0,
+                    "inputs": [
+                        {
+                            "name": "text",
+                            "type": "STRING",
+                            "link": 20,
+                        }
+                    ],
+                },
+            ],
+            "links": [[20, 5, 0, 6, 0, "STRING"]],
+        }
+
+        converted, warnings = module._convert_workflow_json_to_api_prompt(workflow)
+
+        self.assertEqual(
+            converted,
+            {
+                "6": {
+                    "class_type": "CLIPTextEncode",
+                    "inputs": {},
+                    "_meta": {"title": "Consumer"},
+                }
+            },
+        )
+        self.assertIn(
+            "Removed dangling converted input 'text' that referenced an omitted node.",
+            warnings,
+        )
+
     def test_content_route_returns_422_for_unconvertible_workflow_json(self):
         routes = _FakeRoutes()
         module = _import_bridge_with_route_stubs(routes)

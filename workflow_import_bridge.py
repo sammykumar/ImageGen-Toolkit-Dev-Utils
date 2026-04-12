@@ -13,6 +13,7 @@ WORKFLOW_IMPORT_CONTENT_PATH = "/api/image-gen-toolkit/workflows/importable/cont
 USERDATA_WORKFLOWS_PREFIX = "workflows"
 LGRAPH_EVENT_MODE_NEVER = 2
 LGRAPH_EVENT_MODE_BYPASS = 4
+FRONTEND_ONLY_NODE_TYPES = {"Note", "MarkdownNote"}
 
 
 class WorkflowImportConversionError(ValueError):
@@ -157,6 +158,10 @@ def _get_node_title(node: dict[str, Any], fallback: str) -> str:
 
 
 def _should_skip_workflow_node(node: dict[str, Any]) -> bool:
+    node_type = node.get("type")
+    if isinstance(node_type, str) and node_type.strip() in FRONTEND_ONLY_NODE_TYPES:
+        return True
+
     mode = node.get("mode")
     if mode in {LGRAPH_EVENT_MODE_NEVER, LGRAPH_EVENT_MODE_BYPASS}:
         return True
