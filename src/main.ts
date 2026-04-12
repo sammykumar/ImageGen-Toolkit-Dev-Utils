@@ -58,8 +58,89 @@ const DEFAULT_PREVIEW_ASPECT_RATIO = 16 / 9
 const MIN_PREVIEW_HEIGHT = 120
 const NODE_CHROME_HEIGHT = 120
 const EXTENSION_NAME = 'imagegen-toolkit-dev-utils.load-video-url-preview'
+const PUBLISH_API_PATH = '/api/image-gen-toolkit/workflows/published-api'
+const PUBLISH_COMMAND_ID = 'imagegen-toolkit.publish-api-export'
 
 console.info(`[${EXTENSION_NAME}] build`, __IMAGEGEN_TOOLKIT_BUILD_INFO__)
+
+type GraphToPromptResult = {
+	workflow: Record<string, unknown>
+	output: Record<string, unknown>
+}
+
+function describeError(error: unknown): string {
+	if (error instanceof Error && error.message.trim()) {
+		return error.message.trim()
+	}
+
+	if (typeof error === 'string' && error.trim()) {
+		return error.trim()
+	}
+
+	return 'Unknown error'
+}
+
+async function readErrorDetail(response: Response): Promise<string> {
+	const body = await response.text().catch(() => '')
+	if (!body.trim()) {
+		return response.statusText || `HTTP ${response.status}`
+	}
+
+	try {
+		const parsed = JSON.parse(body) as { error?: unknown; message?: unknown }
+		if (typeof parsed.error === 'string' && parsed.error.trim()) {
+			return parsed.error.trim()
+		}
+		if (
+			parsed.error &&
+			typeof parsed.error === 'object' &&
+			!Array.isArray(parsed.error) &&
+			typeof (parsed.error as { message?: unknown }).message === 'string'
+		) {
+			return ((parsed.error as { message: string }).message || '').trim() || body
+		}
+		if (typeof parsed.message === 'string' && parsed.message.trim()) {
+			return parsed.message.trim()
+		}
+	} catch {
+		return body.trim()
+	}
+
+	return body.trim()
+}
+
+async function publishCurrentGraphApiExport() {
+	const result = (await app.graphToPrompt()) as GraphToPromptResult
+	const response = await app.api.fetchApi(PUBLISH_API_PATH, {
+		method: 'POST',
+		headers: {
+			'Content-Type': 'application/json'
+		},
+		body: JSON.stringify({
+			workflow: result.workflow,
+			apiPrompt: result.output
+		})
+	})
+
+	if (!response.ok) {
+		throw new Error(await readErrorDetail(response))
+	}
+
+	const payload = (await response.json()) as {
+		workflowHash?: string
+		publishedAt?: string
+	}
+
+	app.extensionManager.toast.add({
+		severity: 'success',
+		summary: 'Published Export(API)',
+		detail:
+			typeof payload.workflowHash === 'string' && payload.workflowHash.length > 0
+				? `Saved exact API snapshot ${payload.workflowHash.slice(0, 12)} for bridge imports.`
+				: 'Saved exact API snapshot for bridge imports.',
+		life: 5000
+	})
+}
 
 function getVideoUrlWidget(node: NodeLike): WidgetLike | undefined {
 	return node.widgets?.find((widget) => widget.name === 'video_url')
@@ -245,6 +326,32 @@ function attachPreview(node: NodeLike) {
 
 app.registerExtension({
 	name: EXTENSION_NAME,
+	commands: [
+		{
+			id: PUBLISH_COMMAND_ID,
+			label: 'Publish Export(API) Snapshot',
+			menubarLabel: 'Publish Export(API) Snapshot',
+			tooltip: 'Publish the current graphToPrompt() API export for bridge-backed imports.',
+			async function() {
+				try {
+					await publishCurrentGraphApiExport()
+				} catch (error) {
+					app.extensionManager.toast.add({
+						severity: 'error',
+						summary: 'Publish Export(API) failed',
+						detail: describeError(error),
+						life: 7000
+					})
+				}
+			}
+		}
+	],
+	menuCommands: [
+		{
+			path: ['Workflow'],
+			commands: [PUBLISH_COMMAND_ID]
+		}
+	],
 	beforeRegisterNodeDef(nodeType, nodeData) {
 		if (nodeData.name !== TARGET_NODE_NAME) {
 			return

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import json
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -10,7 +11,9 @@ from typing import Any
 
 WORKFLOW_IMPORT_LIST_PATH = "/api/image-gen-toolkit/workflows/importable"
 WORKFLOW_IMPORT_CONTENT_PATH = "/api/image-gen-toolkit/workflows/importable/content"
+WORKFLOW_PUBLISH_API_PATH = "/api/image-gen-toolkit/workflows/published-api"
 USERDATA_WORKFLOWS_PREFIX = "workflows"
+PUBLISHED_API_EXPORTS_PREFIX = ".imagegen-toolkit/published-api"
 LGRAPH_EVENT_MODE_NEVER = 2
 LGRAPH_EVENT_MODE_BYPASS = 4
 FRONTEND_ONLY_NODE_TYPES = {"Note", "MarkdownNote"}
@@ -67,6 +70,19 @@ def _to_iso_modified_at(file_path: Path) -> str | None:
 def _read_json_object(file_path: Path) -> Any:
     with file_path.open("r", encoding="utf-8") as file_handle:
         return json.load(file_handle)
+
+
+def _canonical_json_bytes(value: Any) -> bytes:
+    return json.dumps(
+        value,
+        sort_keys=True,
+        separators=(",", ":"),
+        ensure_ascii=True,
+    ).encode("utf-8")
+
+
+def _compute_workflow_hash(workflow: Any) -> str:
+    return hashlib.sha256(_canonical_json_bytes(workflow)).hexdigest()
 
 
 def _detect_format_hint(workflow: Any) -> str:
@@ -330,11 +346,26 @@ def _build_fetch_payload(record: ImportableWorkflowRecord, workflow: Any) -> dic
     runtime_format: str | None = None
     warnings: list[str] = []
     conversion_payload: dict[str, Any] = {"performed": False}
+    provenance: dict[str, Any] | None = None
 
     if original_format == "api_prompt":
         runtime_format = "api_prompt"
+        provenance = {"source": "source_api_prompt"}
     elif original_format == "workflow_json":
-        runtime_workflow, warnings = _convert_workflow_json_to_api_prompt(workflow)
+        published_api_export = _load_published_api_export(workflow)
+        if published_api_export is not None:
+            runtime_workflow = published_api_export["apiPrompt"]
+            warnings = [
+                "Using published frontend Export(API) snapshot for this workflow."
+            ]
+            provenance = {
+                "source": "frontend_publish",
+                "publishedAt": published_api_export["publishedAt"],
+                "workflowHash": published_api_export["workflowHash"],
+            }
+        else:
+            runtime_workflow, warnings = _convert_workflow_json_to_api_prompt(workflow)
+            provenance = {"source": "python_reconstruction"}
         runtime_format = "api_prompt"
         conversion_payload = {"performed": True}
         if warnings:
@@ -349,6 +380,8 @@ def _build_fetch_payload(record: ImportableWorkflowRecord, workflow: Any) -> dic
     }
     if runtime_format is not None:
         payload["runtimeFormat"] = runtime_format
+    if provenance is not None:
+        payload["provenance"] = provenance
     if warnings:
         payload["warnings"] = warnings
     if payload["formatHint"] == "unknown":
@@ -490,6 +523,65 @@ def _get_userdata_root() -> Path:
         return Path(get_user_directory()) / "default"
 
     raise RuntimeError("ComfyUI userdata directory is unavailable")
+
+
+def _get_published_api_exports_root() -> Path:
+    return _get_userdata_root() / PUBLISHED_API_EXPORTS_PREFIX
+
+
+def _get_published_api_export_path(workflow_hash: str) -> Path:
+    return _get_published_api_exports_root() / f"{workflow_hash}.json"
+
+
+def _load_published_api_export(workflow: Any) -> dict[str, Any] | None:
+    workflow_hash = _compute_workflow_hash(workflow)
+    file_path = _get_published_api_export_path(workflow_hash)
+    if not file_path.is_file():
+        return None
+
+    try:
+        payload = _read_json_object(file_path)
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError):
+        return None
+
+    if not isinstance(payload, dict):
+        return None
+
+    api_prompt = payload.get("apiPrompt")
+    published_at = payload.get("publishedAt")
+    if not isinstance(api_prompt, dict) or not isinstance(published_at, str):
+        return None
+
+    return {
+        "apiPrompt": api_prompt,
+        "publishedAt": published_at,
+        "workflowHash": workflow_hash,
+    }
+
+
+def publish_frontend_api_export(workflow: Any, api_prompt: Any) -> dict[str, Any]:
+    if not isinstance(workflow, dict) or _detect_format_hint(workflow) != "workflow_json":
+        raise ValueError("workflow must be a workflow_json object")
+    if not isinstance(api_prompt, dict) or _detect_format_hint(api_prompt) != "api_prompt":
+        raise ValueError("apiPrompt must be an api_prompt object")
+
+    workflow_hash = _compute_workflow_hash(workflow)
+    published_at = datetime.now(tz=timezone.utc).isoformat().replace("+00:00", "Z")
+    payload = {
+        "workflowHash": workflow_hash,
+        "publishedAt": published_at,
+        "workflow": workflow,
+        "apiPrompt": api_prompt,
+    }
+
+    destination = _get_published_api_export_path(workflow_hash)
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    destination.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+
+    return {
+        "workflowHash": workflow_hash,
+        "publishedAt": published_at,
+    }
 
 
 def _normalize_userdata_source_id(source_id: str) -> PurePosixPath:
@@ -642,6 +734,28 @@ def _register_routes() -> None:
             return web.json_response({"error": str(exc)}, status=404)
 
         return web.json_response(payload)
+
+    @routes.post(WORKFLOW_PUBLISH_API_PATH)
+    async def publish_frontend_api_export_route(request):
+        try:
+            payload = await request.json()
+        except Exception:
+            return web.json_response(
+                {"error": "Request body must be valid JSON"},
+                status=400,
+            )
+
+        workflow = payload.get("workflow") if isinstance(payload, dict) else None
+        api_prompt = payload.get("apiPrompt") if isinstance(payload, dict) else None
+
+        try:
+            publish_result = publish_frontend_api_export(workflow, api_prompt)
+        except ValueError as exc:
+            return web.json_response({"error": str(exc)}, status=400)
+        except OSError as exc:
+            return web.json_response({"error": str(exc)}, status=500)
+
+        return web.json_response({"ok": True, **publish_result})
 
 
 _register_routes()
