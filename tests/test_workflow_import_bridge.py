@@ -391,6 +391,119 @@ class WorkflowImportBridgeTests(unittest.TestCase):
             },
         )
 
+    def test_content_route_returns_400_when_params_are_missing(self):
+        routes = _FakeRoutes()
+        _import_bridge_with_route_stubs(routes)
+        handler = routes.handlers["/api/image-gen-toolkit/workflows/importable/content"]
+
+        response = asyncio.run(handler(_FakeRequest({})))
+
+        self.assertEqual(response["status"], 400)
+        self.assertEqual(
+            response["payload"],
+            {"error": "sourceKind and sourceId are required"},
+        )
+
+    def test_content_route_returns_400_for_invalid_source_kind(self):
+        routes = _FakeRoutes()
+        _import_bridge_with_route_stubs(routes)
+        handler = routes.handlers["/api/image-gen-toolkit/workflows/importable/content"]
+
+        response = asyncio.run(
+            handler(
+                _FakeRequest(
+                    {
+                        "sourceKind": "unsupported_kind",
+                        "sourceId": "workflows/selected.json",
+                    }
+                )
+            )
+        )
+
+        self.assertEqual(response["status"], 400)
+        self.assertEqual(
+            response["payload"],
+            {
+                "error": "sourceKind must be 'workflow_template' or 'userdata_file'"
+            },
+        )
+
+    def test_content_route_returns_400_for_userdata_traversal_attempt(self):
+        routes = _FakeRoutes()
+        module = _import_bridge_with_route_stubs(routes)
+        handler = routes.handlers["/api/image-gen-toolkit/workflows/importable/content"]
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            userdata_root = pathlib.Path(temp_dir) / "default"
+            (userdata_root / "workflows").mkdir(parents=True, exist_ok=True)
+
+            with mock.patch.object(module, "_get_userdata_root", return_value=userdata_root):
+                response = asyncio.run(
+                    handler(
+                        _FakeRequest(
+                            {
+                                "sourceKind": "userdata_file",
+                                "sourceId": "../outside.json",
+                            }
+                        )
+                    )
+                )
+
+        self.assertEqual(response["status"], 400)
+        self.assertEqual(
+            response["payload"],
+            {"error": "sourceId must be a relative userdata path"},
+        )
+
+    def test_content_route_returns_404_for_missing_userdata_file(self):
+        routes = _FakeRoutes()
+        module = _import_bridge_with_route_stubs(routes)
+        handler = routes.handlers["/api/image-gen-toolkit/workflows/importable/content"]
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            userdata_root = pathlib.Path(temp_dir) / "default"
+            (userdata_root / "workflows").mkdir(parents=True, exist_ok=True)
+
+            with mock.patch.object(module, "_get_userdata_root", return_value=userdata_root):
+                response = asyncio.run(
+                    handler(
+                        _FakeRequest(
+                            {
+                                "sourceKind": "userdata_file",
+                                "sourceId": "workflows/missing.json",
+                            }
+                        )
+                    )
+                )
+
+        self.assertEqual(response["status"], 404)
+        self.assertEqual(
+            response["payload"],
+            {"error": "Userdata workflow 'workflows/missing.json' was not found"},
+        )
+
+    def test_get_importable_workflow_content_returns_workflow_json_without_conversion(self):
+        module = importlib.import_module("workflow_import_bridge")
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            userdata_root = pathlib.Path(temp_dir) / "default"
+            workflows_dir = userdata_root / "workflows"
+            workflows_dir.mkdir(parents=True, exist_ok=True)
+            (workflows_dir / "editor-export.json").write_text(
+                '{"nodes": [], "links": []}',
+                encoding="utf-8",
+            )
+
+            with mock.patch.object(module, "_get_userdata_root", return_value=userdata_root):
+                result = module.get_importable_workflow_content(
+                    "userdata_file",
+                    "workflows/editor-export.json",
+                )
+
+        self.assertEqual(result["workflow"], {"nodes": [], "links": []})
+        self.assertEqual(result["formatHint"], "workflow_json")
+        self.assertEqual(result["summary"]["formatHint"], "workflow_json")
+
     def test_content_route_reads_only_specific_requested_workflow(self):
         routes = _FakeRoutes()
         module = _import_bridge_with_route_stubs(routes)
