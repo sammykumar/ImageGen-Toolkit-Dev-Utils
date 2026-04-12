@@ -1,117 +1,56 @@
-import { app as c } from "../../../scripts/app.js";
-var P = { commitHash: "dc2103ebde03", packageVersion: "0.0.5" };
-const I = "load-video-url", _ = "video_url_preview", w = 320, m = 16 / 9, A = 120, k = 120, E = "imagegen-toolkit-dev-utils.load-video-url-preview", x = "/api/image-gen-toolkit/workflows/published-api", v = "imagegen-toolkit.publish-api-export";
-console.info(`[${E}] build`, P);
-function M(e) {
-  return e instanceof Error && e.message.trim() ? e.message.trim() : typeof e == "string" && e.trim() ? e.trim() : "Unknown error";
-}
-async function S(e) {
-  const r = await e.text().catch(() => "");
-  if (!r.trim())
-    return e.statusText || `HTTP ${e.status}`;
-  try {
-    const t = JSON.parse(r);
-    if (typeof t.error == "string" && t.error.trim())
-      return t.error.trim();
-    if (t.error && typeof t.error == "object" && !Array.isArray(t.error) && typeof t.error.message == "string")
-      return (t.error.message || "").trim() || r;
-    if (typeof t.message == "string" && t.message.trim())
-      return t.message.trim();
-  } catch {
-    return r.trim();
-  }
-  return r.trim();
-}
-function N() {
-  var i;
-  const e = c.workflowManager, r = (i = e == null ? void 0 : e.activeWorkflow) == null ? void 0 : i.path;
-  if (typeof r != "string" || !r.trim())
-    return null;
-  const t = r.replace(/^\/+/, "").trim();
-  return t ? { sourceKind: "userdata_file", sourceId: t.startsWith("workflows/") ? t : `workflows/${t}` } : null;
-}
-async function W() {
-  const e = N();
-  if (!e) {
-    c.extensionManager.toast.add({
-      severity: "warn",
-      summary: "Cannot Publish Export(API)",
-      detail: "Open a saved workflow file first (Workflow > Open), then publish.",
-      life: 8e3
-    });
-    return;
-  }
-  const r = await c.graphToPrompt(), t = await c.api.fetchApi(x, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json"
-    },
-    body: JSON.stringify({
-      sourceKind: e.sourceKind,
-      sourceId: e.sourceId,
-      workflow: r.workflow,
-      apiPrompt: r.output
-    })
-  });
-  if (!t.ok)
-    throw new Error(await S(t));
-  const o = await t.json();
-  c.extensionManager.toast.add({
-    severity: "success",
-    summary: "Published Export(API)",
-    detail: typeof o.workflowHash == "string" && o.workflowHash.length > 0 ? `Saved exact API snapshot ${o.workflowHash.slice(0, 12)} for bridge imports.` : "Saved exact API snapshot for bridge imports.",
-    life: 5e3
-  });
-}
-function g(e) {
+import { app as w } from "../../../scripts/app.js";
+var I = { commitHash: "6f4c3fa3695c", packageVersion: "0.0.5" };
+const b = "load-video-url", N = "video_url_preview", h = 320, f = 16 / 9, g = 120, M = 120, _ = "imagegen-toolkit-dev-utils.load-video-url-preview";
+console.info(`[${_}] build`, I);
+function m(t) {
   var r;
-  return (r = e.widgets) == null ? void 0 : r.find((t) => t.name === "video_url");
+  return (r = t.widgets) == null ? void 0 : r.find((e) => e.name === "video_url");
 }
-function H(e) {
-  if (typeof e != "string")
+function z(t) {
+  if (typeof t != "string")
     return !1;
-  const r = e.trim();
+  const r = t.trim();
   if (!r)
     return !1;
   try {
-    const t = new URL(r);
-    return (t.protocol === "http:" || t.protocol === "https:") && t.pathname.toLowerCase().endsWith(".mp4");
+    const e = new URL(r);
+    return (e.protocol === "http:" || e.protocol === "https:") && e.pathname.toLowerCase().endsWith(".mp4");
   } catch {
     return !1;
   }
 }
-function O(e) {
-  return e.videoWidth <= 0 || e.videoHeight <= 0 ? null : e.videoWidth / e.videoHeight;
+function R(t) {
+  return t.videoWidth <= 0 || t.videoHeight <= 0 ? null : t.videoWidth / t.videoHeight;
 }
-function h(e, r = m) {
-  var d, l, u, p;
-  const t = (d = e.computeSize) == null ? void 0 : d.call(e);
-  if (!t)
+function v(t, r = f) {
+  var p, l, c, u;
+  const e = (p = t.computeSize) == null ? void 0 : p.call(t);
+  if (!e)
     return;
-  const o = Math.max(((l = e.size) == null ? void 0 : l[0]) ?? t[0], w), i = Math.max(o - 16, w - 16), n = Math.max(Math.round(i / r), A), a = [
-    o,
-    Math.max(t[1], n + k)
+  const s = Math.max(((l = t.size) == null ? void 0 : l[0]) ?? e[0], h), a = Math.max(s - 16, h - 16), n = Math.max(Math.round(a / r), g), o = [
+    s,
+    Math.max(e[1], n + M)
   ];
-  if (!(((u = e.size) == null ? void 0 : u[0]) === a[0] && ((p = e.size) == null ? void 0 : p[1]) === a[1])) {
-    if (typeof e.setSize == "function") {
-      e.setSize(a);
+  if (!(((c = t.size) == null ? void 0 : c[0]) === o[0] && ((u = t.size) == null ? void 0 : u[1]) === o[1])) {
+    if (typeof t.setSize == "function") {
+      t.setSize(o);
       return;
     }
-    e.size = a;
+    t.size = o;
   }
 }
-function b(e) {
-  if (e.__loadVideoUrlPreviewState || typeof e.addDOMWidget != "function")
+function E(t) {
+  if (t.__loadVideoUrlPreviewState || typeof t.addDOMWidget != "function")
     return;
   const r = document.createElement("div");
-  r.style.display = "none", r.style.width = "100%", r.style.padding = "8px 0 0", r.style.aspectRatio = `${m}`;
-  const t = document.createElement("video");
-  t.controls = !0, t.autoplay = !0, t.loop = !0, t.muted = !0, t.playsInline = !0, t.preload = "metadata", t.style.width = "100%", t.style.height = "100%", t.style.display = "block", t.style.objectFit = "contain", t.style.background = "#111", t.style.borderRadius = "8px", r.append(t);
-  let o = m;
-  const i = (s) => {
-    o = s && Number.isFinite(s) && s > 0 ? s : m, r.style.aspectRatio = `${o}`, h(e, o);
+  r.style.display = "none", r.style.width = "100%", r.style.padding = "8px 0 0", r.style.aspectRatio = `${f}`;
+  const e = document.createElement("video");
+  e.controls = !0, e.autoplay = !0, e.loop = !0, e.muted = !0, e.playsInline = !0, e.preload = "metadata", e.style.width = "100%", e.style.height = "100%", e.style.display = "block", e.style.objectFit = "contain", e.style.background = "#111", e.style.borderRadius = "8px", r.append(e);
+  let s = f;
+  const a = (i) => {
+    s = i && Number.isFinite(i) && i > 0 ? i : f, r.style.aspectRatio = `${s}`, v(t, s);
   };
-  e.addDOMWidget(_, "preview", r, {
+  t.addDOMWidget(N, "preview", r, {
     serialize: !1,
     hideOnZoom: !1,
     getValue() {
@@ -121,77 +60,51 @@ function b(e) {
     }
   });
   const n = new ResizeObserver(() => {
-    r.style.display !== "none" && h(e, o);
+    r.style.display !== "none" && v(t, s);
   });
-  n.observe(r), t.addEventListener("loadedmetadata", () => {
-    i(O(t));
-  }), t.addEventListener("emptied", () => {
-    i(null);
+  n.observe(r), e.addEventListener("loadedmetadata", () => {
+    a(R(e));
+  }), e.addEventListener("emptied", () => {
+    a(null);
   });
-  const a = () => {
-    const s = g(e), f = (typeof (s == null ? void 0 : s.value) == "string" ? s.value : "").trim();
-    if (!H(f)) {
-      r.style.display = "none", i(null), t.pause(), delete t.dataset.previewUrl, t.removeAttribute("src"), t.load();
+  const o = () => {
+    const i = m(t), d = (typeof (i == null ? void 0 : i.value) == "string" ? i.value : "").trim();
+    if (!z(d)) {
+      r.style.display = "none", a(null), e.pause(), delete e.dataset.previewUrl, e.removeAttribute("src"), e.load();
       return;
     }
-    r.style.display = "block", t.dataset.previewUrl !== f && (i(null), t.dataset.previewUrl = f, t.src = f, t.load()), t.play().catch(() => {
-    }), h(e, o);
-  }, d = () => {
-    n.disconnect(), t.pause(), delete t.dataset.previewUrl, t.removeAttribute("src"), t.load();
-  }, l = g(e), u = l == null ? void 0 : l.callback;
-  l && (l.callback = function(...s) {
-    const y = u == null ? void 0 : u.apply(this, s);
-    return a(), y;
+    r.style.display = "block", e.dataset.previewUrl !== d && (a(null), e.dataset.previewUrl = d, e.src = d, e.load()), e.play().catch(() => {
+    }), v(t, s);
+  }, p = () => {
+    n.disconnect(), e.pause(), delete e.dataset.previewUrl, e.removeAttribute("src"), e.load();
+  }, l = m(t), c = l == null ? void 0 : l.callback;
+  l && (l.callback = function(...i) {
+    const y = c == null ? void 0 : c.apply(this, i);
+    return o(), y;
   });
-  const p = e.onRemoved;
-  e.onRemoved = function(...s) {
-    return d(), p == null ? void 0 : p.apply(this, s);
-  }, e.__loadVideoUrlPreviewState = {
-    sync: a,
-    cleanup: d
-  }, a();
+  const u = t.onRemoved;
+  t.onRemoved = function(...i) {
+    return p(), u == null ? void 0 : u.apply(this, i);
+  }, t.__loadVideoUrlPreviewState = {
+    sync: o,
+    cleanup: p
+  }, o();
 }
-c.registerExtension({
-  name: E,
-  commands: [
-    {
-      id: v,
-      label: "Publish Export(API) Snapshot",
-      menubarLabel: "Publish Export(API) Snapshot",
-      tooltip: "Publish the current graphToPrompt() API export for bridge-backed imports.",
-      async function() {
-        try {
-          await W();
-        } catch (e) {
-          c.extensionManager.toast.add({
-            severity: "error",
-            summary: "Publish Export(API) failed",
-            detail: M(e),
-            life: 7e3
-          });
-        }
-      }
-    }
-  ],
-  menuCommands: [
-    {
-      path: ["Workflow"],
-      commands: [v]
-    }
-  ],
-  beforeRegisterNodeDef(e, r) {
-    if (r.name !== I)
+w.registerExtension({
+  name: _,
+  beforeRegisterNodeDef(t, r) {
+    if (r.name !== b)
       return;
-    const t = e.prototype.onNodeCreated;
-    e.prototype.onNodeCreated = function(...i) {
-      const n = t == null ? void 0 : t.apply(this, i);
-      return b(this), n;
+    const e = t.prototype.onNodeCreated;
+    t.prototype.onNodeCreated = function(...a) {
+      const n = e == null ? void 0 : e.apply(this, a);
+      return E(this), n;
     };
-    const o = e.prototype.onConfigure;
-    e.prototype.onConfigure = function(...i) {
-      var a;
-      const n = o == null ? void 0 : o.apply(this, i);
-      return b(this), (a = this.__loadVideoUrlPreviewState) == null || a.sync(), n;
+    const s = t.prototype.onConfigure;
+    t.prototype.onConfigure = function(...a) {
+      var o;
+      const n = s == null ? void 0 : s.apply(this, a);
+      return E(this), (o = this.__loadVideoUrlPreviewState) == null || o.sync(), n;
     };
   }
 });

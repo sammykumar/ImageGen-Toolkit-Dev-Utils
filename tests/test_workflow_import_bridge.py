@@ -31,131 +31,6 @@ class WorkflowImportBridgeTests(unittest.TestCase):
 			"/api/image-gen-toolkit/workflows/importable/content",
             routes.handlers,
         )
-        self.assertIn(
-            "/api/image-gen-toolkit/workflows/published-api",
-            routes.handlers,
-        )
-
-    def test_publish_route_stores_export_keyed_by_source_identity(self):
-        routes = _FakeRoutes()
-        module = _import_bridge_with_route_stubs(routes)
-        handler = routes.handlers["/api/image-gen-toolkit/workflows/published-api"]
-
-        workflow = {
-            "nodes": [
-                {
-                    "id": 1,
-                    "type": "KSampler",
-                    "mode": 0,
-                    "inputs": [{"name": "seed", "type": "INT", "widget": {"name": "seed"}}],
-                    "widgets_values": [42],
-                }
-            ],
-            "links": [],
-        }
-        api_prompt = {"1": {"class_type": "KSampler", "inputs": {"seed": 42}}}
-
-        with tempfile.TemporaryDirectory() as temp_dir:
-            userdata_root = pathlib.Path(temp_dir) / "default"
-            with mock.patch.object(module, "_get_userdata_root", return_value=userdata_root):
-                response = asyncio.run(
-                    handler(
-                        _FakePostRequest(
-                            {
-                                "sourceKind": "userdata_file",
-                                "sourceId": "workflows/my-workflow.json",
-                                "workflow": workflow,
-                                "apiPrompt": api_prompt,
-                            }
-                        )
-                    )
-                )
-
-            self.assertEqual(response["status"], 200)
-            self.assertTrue(response["payload"]["ok"])
-            self.assertIn("workflowHash", response["payload"])
-
-            # Verify the published export can be found by source identity
-            record = module.ImportableWorkflowRecord(
-                source_kind="userdata_file",
-                source_id="workflows/my-workflow.json",
-                display_name="my-workflow.json",
-                file_path=pathlib.Path(temp_dir) / "workflows" / "my-workflow.json",
-            )
-            with mock.patch.object(module, "_get_userdata_root", return_value=userdata_root):
-                found = module._load_published_api_export_for_record(record)
-
-        self.assertIsNotNone(found)
-        self.assertEqual(found["apiPrompt"], api_prompt)
-
-    def test_publish_route_returns_400_when_source_identity_missing(self):
-        routes = _FakeRoutes()
-        module = _import_bridge_with_route_stubs(routes)
-        handler = routes.handlers["/api/image-gen-toolkit/workflows/published-api"]
-
-        workflow = {"nodes": [], "links": []}
-        api_prompt = {"1": {"class_type": "KSampler", "inputs": {}}}
-
-        with tempfile.TemporaryDirectory() as temp_dir:
-            userdata_root = pathlib.Path(temp_dir) / "default"
-            with mock.patch.object(module, "_get_userdata_root", return_value=userdata_root):
-                response = asyncio.run(
-                    handler(
-                        _FakePostRequest(
-                            {
-                                "workflow": workflow,
-                                "apiPrompt": api_prompt,
-                            }
-                        )
-                    )
-                )
-
-        self.assertEqual(response["status"], 400)
-        self.assertEqual(response["payload"], {"error": "sourceKind and sourceId are required"})
-
-    def test_get_importable_workflow_content_uses_published_export_when_available(self):
-        module = importlib.import_module("workflow_import_bridge")
-
-        workflow_json = {
-            "nodes": [
-                {
-                    "id": 50,
-                    "type": "RandomNoise",
-                    "mode": 0,
-                    "inputs": [],
-                    "widgets_values": [42, "fixed", True],
-                }
-            ],
-            "links": [],
-        }
-        # Frontend-exported api_prompt that the Python bridge cannot reconstruct
-        api_prompt = {"50": {"class_type": "RandomNoise", "inputs": {"noise_seed": 42, "noise_type": "fixed"}}}
-
-        with tempfile.TemporaryDirectory() as temp_dir:
-            userdata_root = pathlib.Path(temp_dir) / "default"
-            workflows_dir = userdata_root / "workflows"
-            workflows_dir.mkdir(parents=True, exist_ok=True)
-            (workflows_dir / "random-noise.json").write_text(
-                json.dumps(workflow_json),
-                encoding="utf-8",
-            )
-
-            # Pre-publish the frontend export
-            with mock.patch.object(module, "_get_userdata_root", return_value=userdata_root):
-                module.publish_frontend_api_export(
-                    "userdata_file",
-                    "workflows/random-noise.json",
-                    workflow_json,
-                    api_prompt,
-                )
-                result = module.get_importable_workflow_content(
-                    "userdata_file",
-                    "workflows/random-noise.json",
-                )
-
-        self.assertEqual(result["workflow"], api_prompt)
-        self.assertEqual(result["runtimeFormat"], "api_prompt")
-        self.assertEqual(result["provenance"]["source"], "frontend_publish")
 
     def test_list_importable_workflows_returns_individually_selectable_catalog(self):
         module = importlib.import_module("workflow_import_bridge")
@@ -245,9 +120,6 @@ class WorkflowImportBridgeTests(unittest.TestCase):
                 "workflow": {"1": {"class_type": "LoadImage", "inputs": {}}},
                 "formatHint": "api_prompt",
                 "originalFormat": "api_prompt",
-                "runtimeFormat": "api_prompt",
-                "conversion": {"performed": False},
-                "provenance": {"source": "source_api_prompt"},
             },
         )
 
@@ -612,245 +484,50 @@ class WorkflowImportBridgeTests(unittest.TestCase):
             {"error": "Userdata workflow 'workflows/missing.json' was not found"},
         )
 
-    def test_get_importable_workflow_content_converts_workflow_json_to_api_prompt(self):
+    def test_get_importable_workflow_content_serves_workflow_json_without_converting(self):
         module = importlib.import_module("workflow_import_bridge")
 
-        with tempfile.TemporaryDirectory() as temp_dir:
-            userdata_root = pathlib.Path(temp_dir) / "default"
-            workflows_dir = userdata_root / "workflows"
-            workflows_dir.mkdir(parents=True, exist_ok=True)
-            (workflows_dir / "editor-export.json").write_text(
-                json.dumps(
-                    {
-                        "nodes": [
-                            {
-                                "id": 1,
-                                "title": "Load Image",
-                                "type": "LoadImage",
-                                "mode": 0,
-                                "inputs": [
-                                    {
-                                        "name": "image",
-                                        "type": "STRING",
-                                        "widget": {"name": "image"},
-                                    }
-                                ],
-                                "widgets_values": ["input.png"],
-                            },
-                            {
-                                "id": 2,
-                                "title": "Save Image",
-                                "type": "SaveImage",
-                                "mode": 0,
-                                "inputs": [
-                                    {
-                                        "name": "images",
-                                        "type": "IMAGE",
-                                        "link": 10,
-                                    },
-                                    {
-                                        "name": "filename_prefix",
-                                        "type": "STRING",
-                                        "widget": {"name": "filename_prefix"},
-                                    },
-                                ],
-                                "widgets_values": ["ComfyUI"],
-                            },
-                        ],
-                        "links": [[10, 1, 0, 2, 0, "IMAGE"]],
-                    }
-                ),
-                encoding="utf-8",
-            )
-
-            with mock.patch.object(module, "_get_userdata_root", return_value=userdata_root):
-                result = module.get_importable_workflow_content(
-                    "userdata_file",
-                    "workflows/editor-export.json",
-                )
-
-        self.assertEqual(
-            result["workflow"],
-            {
-                "1": {
-                    "class_type": "LoadImage",
-                    "inputs": {"image": "input.png"},
-                    "_meta": {"title": "Load Image"},
-                },
-                "2": {
-                    "class_type": "SaveImage",
-                    "inputs": {
-                        "images": ["1", 0],
-                        "filename_prefix": "ComfyUI",
-                    },
-                    "_meta": {"title": "Save Image"},
-                },
-            },
-        )
-        self.assertEqual(result["formatHint"], "api_prompt")
-        self.assertEqual(result["originalFormat"], "workflow_json")
-        self.assertEqual(result["runtimeFormat"], "api_prompt")
-        self.assertEqual(result["conversion"], {"performed": True})
-        self.assertEqual(result["summary"]["formatHint"], "workflow_json")
-
-    def test_get_importable_workflow_content_omits_frontend_only_note_nodes(self):
-        module = importlib.import_module("workflow_import_bridge")
-
-        with tempfile.TemporaryDirectory() as temp_dir:
-            userdata_root = pathlib.Path(temp_dir) / "default"
-            workflows_dir = userdata_root / "workflows"
-            workflows_dir.mkdir(parents=True, exist_ok=True)
-            (workflows_dir / "editor-export.json").write_text(
-                json.dumps(
-                    {
-                        "nodes": [
-                            {
-                                "id": 1,
-                                "title": "Load Image",
-                                "type": "LoadImage",
-                                "mode": 0,
-                                "inputs": [
-                                    {
-                                        "name": "image",
-                                        "type": "STRING",
-                                        "widget": {"name": "image"},
-                                    }
-                                ],
-                                "widgets_values": ["input.png"],
-                            },
-                            {
-                                "id": 99,
-                                "title": "Workflow Notes",
-                                "type": "MarkdownNote",
-                                "mode": 0,
-                                "inputs": [
-                                    {
-                                        "name": "text",
-                                        "type": "STRING",
-                                        "widget": {"name": "text"},
-                                    }
-                                ],
-                                "widgets_values": ["Use the default image input."],
-                            },
-                            {
-                                "id": 2,
-                                "title": "Save Image",
-                                "type": "SaveImage",
-                                "mode": 0,
-                                "inputs": [
-                                    {
-                                        "name": "images",
-                                        "type": "IMAGE",
-                                        "link": 10,
-                                    },
-                                    {
-                                        "name": "filename_prefix",
-                                        "type": "STRING",
-                                        "widget": {"name": "filename_prefix"},
-                                    },
-                                ],
-                                "widgets_values": ["ComfyUI"],
-                            },
-                        ],
-                        "links": [[10, 1, 0, 2, 0, "IMAGE"]],
-                    }
-                ),
-                encoding="utf-8",
-            )
-
-            with mock.patch.object(module, "_get_userdata_root", return_value=userdata_root):
-                result = module.get_importable_workflow_content(
-                    "userdata_file",
-                    "workflows/editor-export.json",
-                )
-
-        self.assertEqual(set(result["workflow"].keys()), {"1", "2"})
-        self.assertNotIn("99", result["workflow"])
-        self.assertEqual(result["workflow"]["2"]["inputs"]["images"], ["1", 0])
-
-    def test_convert_workflow_json_prunes_inputs_targeting_removed_note_nodes(self):
-        module = importlib.import_module("workflow_import_bridge")
-
-        workflow = {
+        workflow_json = {
             "nodes": [
                 {
-                    "id": 5,
-                    "title": "Pinned Notes",
-                    "type": "Note",
-                    "mode": 0,
-                    "outputs": [{"name": "text", "type": "STRING", "links": [20]}],
-                    "widgets_values": ["Editor only"],
-                },
-                {
-                    "id": 6,
-                    "title": "Consumer",
-                    "type": "CLIPTextEncode",
+                    "id": 1,
+                    "title": "Load Image",
+                    "type": "LoadImage",
                     "mode": 0,
                     "inputs": [
                         {
-                            "name": "text",
+                            "name": "image",
                             "type": "STRING",
-                            "link": 20,
+                            "widget": {"name": "image"},
                         }
                     ],
+                    "widgets_values": ["input.png"],
                 },
             ],
-            "links": [[20, 5, 0, 6, 0, "STRING"]],
+            "links": [],
         }
-
-        converted, warnings = module._convert_workflow_json_to_api_prompt(workflow)
-
-        self.assertEqual(
-            converted,
-            {
-                "6": {
-                    "class_type": "CLIPTextEncode",
-                    "inputs": {},
-                    "_meta": {"title": "Consumer"},
-                }
-            },
-        )
-        self.assertIn(
-            "Removed dangling converted input 'text' that referenced an omitted node.",
-            warnings,
-        )
-
-    def test_content_route_returns_422_for_unconvertible_workflow_json(self):
-        routes = _FakeRoutes()
-        module = _import_bridge_with_route_stubs(routes)
-        handler = routes.handlers["/api/image-gen-toolkit/workflows/importable/content"]
 
         with tempfile.TemporaryDirectory() as temp_dir:
             userdata_root = pathlib.Path(temp_dir) / "default"
             workflows_dir = userdata_root / "workflows"
             workflows_dir.mkdir(parents=True, exist_ok=True)
             (workflows_dir / "editor-export.json").write_text(
-                '{"nodes": [], "links": []}',
+                json.dumps(workflow_json),
                 encoding="utf-8",
             )
 
             with mock.patch.object(module, "_get_userdata_root", return_value=userdata_root):
-                response = asyncio.run(
-                    handler(
-                        _FakeRequest(
-                            {
-                                "sourceKind": "userdata_file",
-                                "sourceId": "workflows/editor-export.json",
-                            }
-                        )
-                    )
+                result = module.get_importable_workflow_content(
+                    "userdata_file",
+                    "workflows/editor-export.json",
                 )
 
-        self.assertEqual(response["status"], 422)
-        self.assertEqual(
-            response["payload"],
-            {
-                "error": {
-                    "code": "workflow_has_no_executable_nodes",
-                    "message": "Workflow JSON did not contain any executable nodes after filtering muted or virtual nodes.",
-                }
-            },
-        )
+        self.assertEqual(result["workflow"], workflow_json)
+        self.assertEqual(result["formatHint"], "workflow_json")
+        self.assertEqual(result["originalFormat"], "workflow_json")
+        self.assertNotIn("runtimeFormat", result)
+        self.assertNotIn("conversion", result)
+        self.assertNotIn("provenance", result)
 
     def test_content_route_reads_only_specific_requested_workflow(self):
         routes = _FakeRoutes()
@@ -895,26 +572,11 @@ class _FakeRequest:
         self.rel_url = types.SimpleNamespace(query=query)
 
 
-class _FakePostRequest:
-    def __init__(self, body):
-        self._body = body
-
-    async def json(self):
-        return self._body
-
-
 class _FakeRoutes:
     def __init__(self):
         self.handlers = {}
 
     def get(self, path):
-        def decorator(handler):
-            self.handlers[path] = handler
-            return handler
-
-        return decorator
-
-    def post(self, path):
         def decorator(handler):
             self.handlers[path] = handler
             return handler
