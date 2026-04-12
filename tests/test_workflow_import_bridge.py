@@ -121,6 +121,276 @@ class WorkflowImportBridgeTests(unittest.TestCase):
             },
         )
 
+    def test_list_importable_workflows_skips_userdata_file_with_invalid_utf8(self):
+        module = importlib.import_module("workflow_import_bridge")
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            userdata_root = pathlib.Path(temp_dir) / "default"
+            workflows_dir = userdata_root / "workflows"
+            workflows_dir.mkdir(parents=True, exist_ok=True)
+            (workflows_dir / "valid.json").write_text(
+                '{"1": {"class_type": "LoadImage", "inputs": {}}}',
+                encoding="utf-8",
+            )
+            (workflows_dir / "broken.json").write_bytes(b"\x80\x81not-utf8")
+
+            with mock.patch.object(module, "_get_userdata_root", return_value=userdata_root), mock.patch.object(
+                module,
+                "_list_workflow_templates",
+                return_value=[],
+            ):
+                result = module.list_importable_workflows()
+
+        self.assertEqual(
+            result,
+            [
+                {
+                    "sourceKind": "userdata_file",
+                    "sourceId": "workflows/valid.json",
+                    "displayName": "valid.json",
+                    "path": "userdata/workflows/valid.json",
+                    "modifiedAt": result[0]["modifiedAt"],
+                    "formatHint": "api_prompt",
+                }
+            ],
+        )
+
+    def test_list_importable_workflows_skips_userdata_file_with_invalid_json(self):
+        module = importlib.import_module("workflow_import_bridge")
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            userdata_root = pathlib.Path(temp_dir) / "default"
+            workflows_dir = userdata_root / "workflows"
+            workflows_dir.mkdir(parents=True, exist_ok=True)
+            (workflows_dir / "valid.json").write_text(
+                '{"1": {"class_type": "LoadImage", "inputs": {}}}',
+                encoding="utf-8",
+            )
+            (workflows_dir / "broken.json").write_text(
+                '{"nodes": [}',
+                encoding="utf-8",
+            )
+
+            with mock.patch.object(module, "_get_userdata_root", return_value=userdata_root), mock.patch.object(
+                module,
+                "_list_workflow_templates",
+                return_value=[],
+            ):
+                result = module.list_importable_workflows()
+
+        self.assertEqual(
+            result,
+            [
+                {
+                    "sourceKind": "userdata_file",
+                    "sourceId": "workflows/valid.json",
+                    "displayName": "valid.json",
+                    "path": "userdata/workflows/valid.json",
+                    "modifiedAt": result[0]["modifiedAt"],
+                    "formatHint": "api_prompt",
+                }
+            ],
+        )
+
+    def test_list_importable_workflows_skips_userdata_file_when_read_fails(self):
+        module = importlib.import_module("workflow_import_bridge")
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            userdata_root = pathlib.Path(temp_dir) / "default"
+            workflows_dir = userdata_root / "workflows"
+            workflows_dir.mkdir(parents=True, exist_ok=True)
+            valid_path = workflows_dir / "valid.json"
+            valid_path.write_text(
+                '{"1": {"class_type": "LoadImage", "inputs": {}}}',
+                encoding="utf-8",
+            )
+            broken_path = workflows_dir / "broken.json"
+            broken_path.write_text(
+                '{"1": {"class_type": "LoadImage", "inputs": {}}}',
+                encoding="utf-8",
+            )
+            broken_path_resolved = broken_path.resolve()
+
+            original_read_json_object = module._read_json_object
+
+            def read_json_object_side_effect(file_path):
+                if file_path.resolve() == broken_path_resolved:
+                    raise OSError("permission denied")
+                return original_read_json_object(file_path)
+
+            with mock.patch.object(module, "_get_userdata_root", return_value=userdata_root), mock.patch.object(
+                module,
+                "_list_workflow_templates",
+                return_value=[],
+            ), mock.patch.object(module, "_read_json_object", side_effect=read_json_object_side_effect):
+                result = module.list_importable_workflows()
+
+        self.assertEqual(
+            result,
+            [
+                {
+                    "sourceKind": "userdata_file",
+                    "sourceId": "workflows/valid.json",
+                    "displayName": "valid.json",
+                    "path": "userdata/workflows/valid.json",
+                    "modifiedAt": result[0]["modifiedAt"],
+                    "formatHint": "api_prompt",
+                }
+            ],
+        )
+
+    def test_get_importable_workflow_content_raises_clear_error_for_invalid_utf8(self):
+        module = importlib.import_module("workflow_import_bridge")
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            userdata_root = pathlib.Path(temp_dir) / "default"
+            workflows_dir = userdata_root / "workflows"
+            workflows_dir.mkdir(parents=True, exist_ok=True)
+            (workflows_dir / "broken.json").write_bytes(b"\x80\x81not-utf8")
+
+            with mock.patch.object(module, "_get_userdata_root", return_value=userdata_root):
+                with self.assertRaisesRegex(
+                    ValueError,
+                    "Workflow 'workflows/broken.json' could not be read as valid UTF-8 JSON",
+                ):
+                    module.get_importable_workflow_content(
+                        "userdata_file",
+                        "workflows/broken.json",
+                    )
+
+    def test_get_importable_workflow_content_raises_clear_error_for_invalid_json(self):
+        module = importlib.import_module("workflow_import_bridge")
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            userdata_root = pathlib.Path(temp_dir) / "default"
+            workflows_dir = userdata_root / "workflows"
+            workflows_dir.mkdir(parents=True, exist_ok=True)
+            (workflows_dir / "broken.json").write_text(
+                '{"nodes": [}',
+                encoding="utf-8",
+            )
+
+            with mock.patch.object(module, "_get_userdata_root", return_value=userdata_root):
+                with self.assertRaisesRegex(
+                    ValueError,
+                    "Workflow 'workflows/broken.json' could not be read as valid UTF-8 JSON",
+                ):
+                    module.get_importable_workflow_content(
+                        "userdata_file",
+                        "workflows/broken.json",
+                    )
+
+    def test_get_importable_workflow_content_raises_clear_error_when_read_fails(self):
+        module = importlib.import_module("workflow_import_bridge")
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            userdata_root = pathlib.Path(temp_dir) / "default"
+            workflows_dir = userdata_root / "workflows"
+            workflows_dir.mkdir(parents=True, exist_ok=True)
+            broken_path = workflows_dir / "broken.json"
+            broken_path.write_text(
+                '{"1": {"class_type": "LoadImage", "inputs": {}}}',
+                encoding="utf-8",
+            )
+            broken_path_resolved = broken_path.resolve()
+
+            original_read_json_object = module._read_json_object
+
+            def read_json_object_side_effect(file_path):
+                if file_path.resolve() == broken_path_resolved:
+                    raise OSError("permission denied")
+                return original_read_json_object(file_path)
+
+            with mock.patch.object(module, "_get_userdata_root", return_value=userdata_root), mock.patch.object(
+                module,
+                "_read_json_object",
+                side_effect=read_json_object_side_effect,
+            ):
+                with self.assertRaisesRegex(
+                    ValueError,
+                    "Workflow 'workflows/broken.json' could not be read as valid UTF-8 JSON",
+                ):
+                    module.get_importable_workflow_content(
+                        "userdata_file",
+                        "workflows/broken.json",
+                    )
+
+    def test_list_route_returns_200_when_userdata_contains_invalid_json(self):
+        routes = _FakeRoutes()
+        module = _import_bridge_with_route_stubs(routes)
+        handler = routes.handlers["/api/image-gen-toolkit/workflows/importable"]
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            userdata_root = pathlib.Path(temp_dir) / "default"
+            workflows_dir = userdata_root / "workflows"
+            workflows_dir.mkdir(parents=True, exist_ok=True)
+            (workflows_dir / "valid.json").write_text(
+                '{"1": {"class_type": "LoadImage", "inputs": {}}}',
+                encoding="utf-8",
+            )
+            (workflows_dir / "broken.json").write_text(
+                '{"nodes": [}',
+                encoding="utf-8",
+            )
+
+            with mock.patch.object(module, "_get_userdata_root", return_value=userdata_root), mock.patch.object(
+                module,
+                "_list_workflow_templates",
+                return_value=[],
+            ):
+                response = asyncio.run(handler(_FakeRequest({})))
+
+        self.assertEqual(response["status"], 200)
+        self.assertEqual(
+            response["payload"],
+            {
+                "workflows": [
+                    {
+                        "sourceKind": "userdata_file",
+                        "sourceId": "workflows/valid.json",
+                        "displayName": "valid.json",
+                        "path": "userdata/workflows/valid.json",
+                        "modifiedAt": response["payload"]["workflows"][0]["modifiedAt"],
+                        "formatHint": "api_prompt",
+                    }
+                ]
+            },
+        )
+
+    def test_content_route_returns_clear_400_for_invalid_json_userdata_file(self):
+        routes = _FakeRoutes()
+        module = _import_bridge_with_route_stubs(routes)
+        handler = routes.handlers["/api/image-gen-toolkit/workflows/importable/content"]
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            userdata_root = pathlib.Path(temp_dir) / "default"
+            workflows_dir = userdata_root / "workflows"
+            workflows_dir.mkdir(parents=True, exist_ok=True)
+            (workflows_dir / "broken.json").write_text(
+                '{"nodes": [}',
+                encoding="utf-8",
+            )
+
+            with mock.patch.object(module, "_get_userdata_root", return_value=userdata_root):
+                response = asyncio.run(
+                    handler(
+                        _FakeRequest(
+                            {
+                                "sourceKind": "userdata_file",
+                                "sourceId": "workflows/broken.json",
+                            }
+                        )
+                    )
+                )
+
+        self.assertEqual(response["status"], 400)
+        self.assertEqual(
+            response["payload"],
+            {
+                "error": "Workflow 'workflows/broken.json' could not be read as valid UTF-8 JSON"
+            },
+        )
+
     def test_content_route_reads_only_specific_requested_workflow(self):
         routes = _FakeRoutes()
         module = _import_bridge_with_route_stubs(routes)

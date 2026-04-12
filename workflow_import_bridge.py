@@ -83,7 +83,7 @@ def _workflow_record_from_file(
 
     try:
         workflow = _read_json_object(file_path)
-    except (OSError, json.JSONDecodeError):
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError):
         return None
 
     return ImportableWorkflowRecord(
@@ -265,9 +265,19 @@ def _resolve_userdata_record(source_id: str) -> ImportableWorkflowRecord:
         file_path=file_path,
         path=f"userdata/{relative_path.as_posix()}",
     )
-    if record is None:
+    if record is not None:
+        return record
+    if not _is_json_file(file_path):
         raise ValueError(f"Userdata workflow '{source_id}' is not a valid JSON workflow")
-    return record
+
+    return ImportableWorkflowRecord(
+        source_kind="userdata_file",
+        source_id=relative_path.as_posix(),
+        display_name=file_path.name,
+        file_path=file_path,
+        path=f"userdata/{relative_path.as_posix()}",
+        modified_at=_to_iso_modified_at(file_path),
+    )
 
 
 def get_importable_workflow_content(
@@ -281,7 +291,13 @@ def get_importable_workflow_content(
     else:
         raise ValueError("sourceKind must be 'workflow_template' or 'userdata_file'")
 
-    workflow = _read_json_object(record.file_path)
+    try:
+        workflow = _read_json_object(record.file_path)
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise ValueError(
+            f"Workflow '{source_id}' could not be read as valid UTF-8 JSON"
+        ) from exc
+
     payload: dict[str, Any] = {
         "summary": record.to_summary(),
         "workflow": workflow,
