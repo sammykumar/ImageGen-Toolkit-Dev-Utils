@@ -1,6 +1,6 @@
 import { api as S } from "../../../scripts/api.js";
 import { app as E } from "../../../scripts/app.js";
-var x = { commitHash: "d7f2f1a194fb", packageVersion: "0.0.5" };
+var x = { commitHash: "90af542006af", packageVersion: "0.0.5" };
 const A = "load-video-url", P = "video_url_preview", y = "JobEventEmitter", U = "events_url", z = "event_token", h = ["ImageGen Toolkit", "Job Event Emitter"], L = "ImageGenToolkit.JobEventEmitter.eventsUrl", M = "ImageGenToolkit.JobEventEmitter.eventToken", I = 320, f = 16 / 9, G = 120, J = 120, O = "imagegen-toolkit-dev-utils.load-video-url-preview", W = "imagegen-toolkit.live-export.request", C = "/image-gen-toolkit/live-export/result", D = "imagegen-toolkit-dev-utils.live-export-bridge";
 let N = !1;
 console.info(`[${O}] build`, x);
