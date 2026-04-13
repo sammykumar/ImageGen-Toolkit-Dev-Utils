@@ -12,6 +12,11 @@ WORKFLOW_IMPORT_LIST_PATH = "/api/image-gen-toolkit/workflows/importable"
 WORKFLOW_IMPORT_CONTENT_PATH = "/api/image-gen-toolkit/workflows/importable/content"
 USERDATA_WORKFLOWS_PREFIX = "workflows"
 
+_LGRAPH_MODE_BYPASS: int = 4
+_LGRAPH_MODE_NEVER: int = 2
+_FRONTEND_ONLY_NODE_TYPES: frozenset[str] = frozenset({"Note", "Reroute"})
+_WIDGET_PRIMITIVE_TYPES: frozenset[str] = frozenset({"INT", "FLOAT", "STRING", "BOOLEAN"})
+
 
 class WorkflowImportConversionError(ValueError):
     def __init__(
@@ -337,7 +342,225 @@ def get_importable_workflow_content(
             f"Workflow '{source_id}' could not be read as valid UTF-8 JSON"
         ) from exc
 
-    return _build_fetch_payload(record, workflow)
+    original_format = record.format_hint or _detect_format_hint(workflow)
+    converted = False
+    if original_format == "workflow_json":
+        try:
+            workflow = _convert_workflow_json_to_api_prompt(workflow)
+            converted = True
+        except WorkflowImportConversionError as exc:
+            if exc.code != "nodes_unavailable":
+                raise
+
+    payload = _build_fetch_payload(record, workflow)
+    if converted:
+        payload["formatHint"] = "api_prompt"
+        payload["originalFormat"] = "workflow_json"
+    return payload
+
+
+def _is_widget_input(type_def: Any) -> bool:
+    """True for list/tuple combo choices and primitive scalar types."""
+    if isinstance(type_def, (list, tuple)):
+        return True
+    return isinstance(type_def, str) and type_def in _WIDGET_PRIMITIVE_TYPES
+
+
+def _has_control_after_generate(config: dict[str, Any]) -> bool:
+    return bool(config.get("control_after_generate"))
+
+
+def _resolve_reroute_chain(
+    node_map: dict[int, Any],
+    link_map: dict[int, tuple[int, int]],
+    link_id: int,
+    skipped_ids: set[int],
+    visited: set[int] | None = None,
+) -> tuple[str, int] | None:
+    """Resolve a link through Reroute/skipped nodes to the actual source."""
+    if visited is None:
+        visited = set()
+    if link_id in visited:
+        return None
+    visited.add(link_id)
+
+    if link_id not in link_map:
+        return None
+
+    src_node_id, src_output_slot = link_map[link_id]
+
+    if src_node_id not in skipped_ids:
+        return (str(src_node_id), src_output_slot)
+
+    # Source is a skipped node (Reroute) — find its single input link and recurse
+    src_node = node_map.get(src_node_id)
+    if src_node is None:
+        return None
+
+    for inp in src_node.get("inputs", []):
+        next_link_id = inp.get("link")
+        if next_link_id is not None:
+            return _resolve_reroute_chain(
+                node_map, link_map, int(next_link_id), skipped_ids, visited
+            )
+
+    return None
+
+
+def _convert_workflow_json_to_api_prompt(
+    workflow: dict[str, Any],
+    nodes_map: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Convert a LiteGraph workflow_json to ComfyUI api_prompt format.
+
+    nodes_map defaults to NODE_CLASS_MAPPINGS from the live ComfyUI process.
+    Raises WorkflowImportConversionError on unrecoverable failure.
+    """
+    if nodes_map is None:
+        try:
+            import nodes as _nodes_module  # type: ignore
+            nodes_map = _nodes_module.NODE_CLASS_MAPPINGS
+        except (ImportError, AttributeError):
+            raise WorkflowImportConversionError(
+                "NODE_CLASS_MAPPINGS unavailable",
+                code="nodes_unavailable",
+            )
+
+    # Build link_map: linkId -> (srcNodeId, srcOutputSlot)
+    link_map: dict[int, tuple[int, int]] = {}
+    for link in workflow.get("links", []):
+        link_map[int(link[0])] = (int(link[1]), int(link[2]))
+
+    # Build node_map: nodeId -> node
+    node_map: dict[int, Any] = {}
+    for node in workflow.get("nodes", []):
+        node_map[int(node["id"])] = node
+
+    # Determine skipped_ids
+    skipped_ids: set[int] = set()
+    for node in workflow.get("nodes", []):
+        node_id = int(node["id"])
+        if node.get("mode") in (_LGRAPH_MODE_BYPASS, _LGRAPH_MODE_NEVER):
+            skipped_ids.add(node_id)
+        elif node.get("type") in _FRONTEND_ONLY_NODE_TYPES:
+            skipped_ids.add(node_id)
+
+    api_prompt: dict[str, Any] = {}
+
+    for node in workflow.get("nodes", []):
+        node_id = int(node["id"])
+        if node_id in skipped_ids:
+            continue
+
+        node_type = node.get("type", "")
+        cls = nodes_map.get(node_type)
+        if cls is None:
+            continue
+
+        try:
+            input_types = cls.INPUT_TYPES()
+        except Exception:
+            continue
+
+        required: dict[str, Any] = input_types.get("required", {}) or {}
+        optional: dict[str, Any] = input_types.get("optional", {}) or {}
+
+        # Build connected_links: input_name -> link_id
+        connected_links: dict[str, int] = {}
+        for inp in node.get("inputs", []):
+            inp_link = inp.get("link")
+            if inp_link is not None:
+                connected_links[inp["name"]] = int(inp_link)
+
+        widgets_values: list[Any] = node.get("widgets_values", [])
+        widget_idx = 0
+        node_inputs: dict[str, Any] = {}
+
+        for section in (required, optional):
+            for input_name, type_info in section.items():
+                if not isinstance(type_info, (list, tuple)) or len(type_info) < 1:
+                    continue
+                type_def = type_info[0]
+                config: dict[str, Any] = (
+                    type_info[1]
+                    if len(type_info) > 1 and isinstance(type_info[1], dict)
+                    else {}
+                )
+
+                if _is_widget_input(type_def):
+                    widget_value = (
+                        widgets_values[widget_idx]
+                        if widget_idx < len(widgets_values)
+                        else None
+                    )
+                    widget_idx += 1
+                    if _has_control_after_generate(config):
+                        widget_idx += 1  # skip control_after_generate slot
+
+                    if input_name in connected_links:
+                        lnk_id = connected_links[input_name]
+                        if lnk_id in link_map:
+                            src_node_id, src_slot = link_map[lnk_id]
+                            node_inputs[input_name] = [str(src_node_id), src_slot]
+                        elif widget_value is not None:
+                            node_inputs[input_name] = widget_value
+                    elif widget_value is not None:
+                        node_inputs[input_name] = widget_value
+                else:
+                    # Link-type input
+                    if input_name in connected_links:
+                        lnk_id = connected_links[input_name]
+                        if lnk_id in link_map:
+                            src_node_id, src_slot = link_map[lnk_id]
+                            node_inputs[input_name] = [str(src_node_id), src_slot]
+
+        api_prompt[str(node_id)] = {
+            "class_type": node_type,
+            "inputs": node_inputs,
+            "_meta": {"title": node.get("title") or node.get("type", "")},
+        }
+
+    # Post-process: resolve Reroute chains for link references that point to skipped nodes
+    for api_node in api_prompt.values():
+        inputs = api_node.get("inputs", {})
+        for input_name in list(inputs.keys()):
+            value = inputs[input_name]
+            if not (isinstance(value, list) and len(value) == 2):
+                continue
+            src_id_str = value[0]
+            try:
+                src_id = int(src_id_str)
+            except (ValueError, TypeError):
+                continue
+            if src_id not in skipped_ids:
+                continue
+
+            # Source is a skipped node (e.g., Reroute) — resolve chain
+            src_node = node_map.get(src_id)
+            if src_node is None:
+                del inputs[input_name]
+                continue
+
+            reroute_input_link: int | None = None
+            for inp in src_node.get("inputs", []):
+                lnk = inp.get("link")
+                if lnk is not None:
+                    reroute_input_link = int(lnk)
+                    break
+
+            if reroute_input_link is None:
+                del inputs[input_name]
+                continue
+
+            resolved = _resolve_reroute_chain(
+                node_map, link_map, reroute_input_link, skipped_ids
+            )
+            if resolved:
+                inputs[input_name] = list(resolved)
+            else:
+                del inputs[input_name]
+
+    return api_prompt
 
 
 def _register_routes() -> None:

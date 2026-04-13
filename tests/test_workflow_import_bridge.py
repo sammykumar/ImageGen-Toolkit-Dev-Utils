@@ -607,3 +607,311 @@ class _FakeWebModule:
     @staticmethod
     def json_response(payload, status=200):
         return {"payload": payload, "status": status}
+
+
+class WorkflowJsonConversionTests(unittest.TestCase):
+    def setUp(self):
+        self.module = importlib.import_module("workflow_import_bridge")
+
+    def _convert(self, workflow: dict, nodes_map: dict) -> dict:
+        return self.module._convert_workflow_json_to_api_prompt(
+            workflow, nodes_map=nodes_map
+        )
+
+    def test_primitive_widgets_consumed_from_widgets_values(self):
+        class MockNode:
+            @classmethod
+            def INPUT_TYPES(cls):
+                return {
+                    "required": {
+                        "my_int": ("INT", {}),
+                        "my_float": ("FLOAT", {}),
+                        "my_str": ("STRING", {}),
+                    },
+                    "optional": {},
+                }
+
+        workflow = {
+            "nodes": [
+                {
+                    "id": 10,
+                    "type": "MockNode",
+                    "mode": 0,
+                    "inputs": [],
+                    "widgets_values": [42, 3.14, "hello"],
+                }
+            ],
+            "links": [],
+        }
+        result = self._convert(workflow, {"MockNode": MockNode})
+        self.assertEqual(result["10"]["inputs"]["my_int"], 42)
+        self.assertEqual(result["10"]["inputs"]["my_float"], 3.14)
+        self.assertEqual(result["10"]["inputs"]["my_str"], "hello")
+
+    def test_combo_widget_consumed_from_widgets_values(self):
+        class MockNode:
+            @classmethod
+            def INPUT_TYPES(cls):
+                return {
+                    "required": {
+                        "sampler_name": (["euler", "dpm_2", "lms"], {}),
+                    },
+                    "optional": {},
+                }
+
+        workflow = {
+            "nodes": [
+                {
+                    "id": 5,
+                    "type": "MockNode",
+                    "mode": 0,
+                    "inputs": [],
+                    "widgets_values": ["euler"],
+                }
+            ],
+            "links": [],
+        }
+        result = self._convert(workflow, {"MockNode": MockNode})
+        self.assertEqual(result["5"]["inputs"]["sampler_name"], "euler")
+
+    def test_link_type_input_resolved_from_links_array(self):
+        class SrcNode:
+            @classmethod
+            def INPUT_TYPES(cls):
+                return {"required": {}, "optional": {}}
+
+        class DstNode:
+            @classmethod
+            def INPUT_TYPES(cls):
+                return {
+                    "required": {"model": ("MODEL", {})},
+                    "optional": {},
+                }
+
+        workflow = {
+            "nodes": [
+                {"id": 1, "type": "SrcNode", "mode": 0, "inputs": [], "widgets_values": []},
+                {
+                    "id": 2,
+                    "type": "DstNode",
+                    "mode": 0,
+                    "inputs": [{"name": "model", "type": "MODEL", "link": 10}],
+                    "widgets_values": [],
+                },
+            ],
+            "links": [[10, 1, 0, 2, 0, "MODEL"]],
+        }
+        result = self._convert(workflow, {"SrcNode": SrcNode, "DstNode": DstNode})
+        self.assertEqual(result["2"]["inputs"]["model"], ["1", 0])
+
+    def test_widget_converted_to_link_emits_link_ref(self):
+        class SrcNode:
+            @classmethod
+            def INPUT_TYPES(cls):
+                return {"required": {"out": ("STRING", {})}, "optional": {}}
+
+        class DstNode:
+            @classmethod
+            def INPUT_TYPES(cls):
+                return {
+                    "required": {"text": ("STRING", {})},
+                    "optional": {},
+                }
+
+        workflow = {
+            "nodes": [
+                {
+                    "id": 1,
+                    "type": "SrcNode",
+                    "mode": 0,
+                    "inputs": [],
+                    "widgets_values": ["src_value"],
+                },
+                {
+                    "id": 2,
+                    "type": "DstNode",
+                    "mode": 0,
+                    "inputs": [
+                        {
+                            "name": "text",
+                            "type": "STRING",
+                            "link": 20,
+                            "widget": {"name": "text"},
+                        }
+                    ],
+                    "widgets_values": ["widget_fallback"],
+                },
+            ],
+            "links": [[20, 1, 0, 2, 0, "STRING"]],
+        }
+        result = self._convert(workflow, {"SrcNode": SrcNode, "DstNode": DstNode})
+        self.assertEqual(result["2"]["inputs"]["text"], ["1", 0])
+
+    def test_reroute_chain_resolved(self):
+        class SrcNode:
+            @classmethod
+            def INPUT_TYPES(cls):
+                return {"required": {}, "optional": {}}
+
+        class DstNode:
+            @classmethod
+            def INPUT_TYPES(cls):
+                return {
+                    "required": {"image": ("IMAGE", {})},
+                    "optional": {},
+                }
+
+        workflow = {
+            "nodes": [
+                {"id": 1, "type": "SrcNode", "mode": 0, "inputs": [], "widgets_values": []},
+                {
+                    "id": 2,
+                    "type": "Reroute",
+                    "mode": 0,
+                    "inputs": [{"name": "value", "type": "*", "link": 10}],
+                    "widgets_values": [],
+                },
+                {
+                    "id": 3,
+                    "type": "DstNode",
+                    "mode": 0,
+                    "inputs": [{"name": "image", "type": "IMAGE", "link": 20}],
+                    "widgets_values": [],
+                },
+            ],
+            "links": [
+                [10, 1, 0, 2, 0, "*"],
+                [20, 2, 0, 3, 0, "IMAGE"],
+            ],
+        }
+        result = self._convert(workflow, {"SrcNode": SrcNode, "DstNode": DstNode})
+        self.assertNotIn("2", result)
+        self.assertEqual(result["3"]["inputs"]["image"], ["1", 0])
+
+    def test_bypass_nodes_skipped(self):
+        class MockNode:
+            @classmethod
+            def INPUT_TYPES(cls):
+                return {"required": {}, "optional": {}}
+
+        workflow = {
+            "nodes": [
+                {"id": 99, "type": "MockNode", "mode": 4, "inputs": [], "widgets_values": []}
+            ],
+            "links": [],
+        }
+        result = self._convert(workflow, {"MockNode": MockNode})
+        self.assertNotIn("99", result)
+
+    def test_never_nodes_skipped(self):
+        class MockNode:
+            @classmethod
+            def INPUT_TYPES(cls):
+                return {"required": {}, "optional": {}}
+
+        workflow = {
+            "nodes": [
+                {"id": 77, "type": "MockNode", "mode": 2, "inputs": [], "widgets_values": []}
+            ],
+            "links": [],
+        }
+        result = self._convert(workflow, {"MockNode": MockNode})
+        self.assertNotIn("77", result)
+
+    def test_unknown_node_type_skipped(self):
+        workflow = {
+            "nodes": [
+                {
+                    "id": 5,
+                    "type": "NonExistentNode",
+                    "mode": 0,
+                    "inputs": [],
+                    "widgets_values": [],
+                }
+            ],
+            "links": [],
+        }
+        result = self._convert(workflow, {})
+        self.assertNotIn("5", result)
+
+    def test_meta_title_uses_node_title(self):
+        class MockNode:
+            @classmethod
+            def INPUT_TYPES(cls):
+                return {"required": {}, "optional": {}}
+
+        workflow = {
+            "nodes": [
+                {
+                    "id": 7,
+                    "type": "NodeType",
+                    "title": "My Node",
+                    "mode": 0,
+                    "inputs": [],
+                    "widgets_values": [],
+                }
+            ],
+            "links": [],
+        }
+        result = self._convert(workflow, {"NodeType": MockNode})
+        self.assertEqual(result["7"]["_meta"]["title"], "My Node")
+
+    def test_meta_title_falls_back_to_type(self):
+        class MockNode:
+            @classmethod
+            def INPUT_TYPES(cls):
+                return {"required": {}, "optional": {}}
+
+        workflow = {
+            "nodes": [
+                {
+                    "id": 7,
+                    "type": "NodeType",
+                    "mode": 0,
+                    "inputs": [],
+                    "widgets_values": [],
+                }
+            ],
+            "links": [],
+        }
+        result = self._convert(workflow, {"NodeType": MockNode})
+        self.assertEqual(result["7"]["_meta"]["title"], "NodeType")
+
+    def test_get_importable_workflow_content_converts_workflow_json_file(self):
+        module = importlib.import_module("workflow_import_bridge")
+
+        mock_api_prompt = {
+            "1": {
+                "class_type": "LoadImage",
+                "inputs": {"image": "test.png"},
+                "_meta": {"title": "LoadImage"},
+            }
+        }
+        workflow_json = {
+            "nodes": [{"id": 1, "type": "LoadImage", "mode": 0}],
+            "links": [],
+        }
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            userdata_root = pathlib.Path(temp_dir) / "default"
+            workflows_dir = userdata_root / "workflows"
+            workflows_dir.mkdir(parents=True, exist_ok=True)
+            (workflows_dir / "test.json").write_text(
+                json.dumps(workflow_json),
+                encoding="utf-8",
+            )
+
+            with mock.patch.object(
+                module, "_get_userdata_root", return_value=userdata_root
+            ), mock.patch.object(
+                module,
+                "_convert_workflow_json_to_api_prompt",
+                return_value=mock_api_prompt,
+            ):
+                result = module.get_importable_workflow_content(
+                    "userdata_file",
+                    "workflows/test.json",
+                )
+
+        self.assertEqual(result["formatHint"], "api_prompt")
+        self.assertEqual(result["originalFormat"], "workflow_json")
