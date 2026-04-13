@@ -90,6 +90,8 @@ type LiveExportMetadata = {
 	clientId?: string
 	graphId?: string
 	frontendVersion?: string
+	workflowTitle?: string
+	pageTitle?: string
 }
 
 type AppWithLiveExport = typeof app & {
@@ -131,12 +133,58 @@ console.info(`[${EXTENSION_NAME}] build`, __IMAGEGEN_TOOLKIT_BUILD_INFO__)
 
 function getLiveExportMetadata(): LiveExportMetadata {
 	const liveExportApp = app as AppWithLiveExport
+	const pageTitle = normalizeLiveExportPageTitle(document.title)
 
 	return {
 		clientId: liveExportApp.api?.clientId,
 		graphId: globalThis.graph?.id,
-		frontendVersion: globalThis.graph?.extra?.frontendVersion
+		frontendVersion: globalThis.graph?.extra?.frontendVersion,
+		workflowTitle: deriveLiveExportWorkflowTitle(pageTitle),
+		pageTitle
 	}
+}
+
+function normalizeLiveExportPageTitle(value: string | null | undefined): string | undefined {
+	if (typeof value !== 'string') {
+		return undefined
+	}
+
+	const normalized = value.replace(/\s+/g, ' ').trim()
+	return normalized ? normalized : undefined
+}
+
+function sanitizeLiveWorkflowTitle(value: string): string | undefined {
+	const normalized = value
+		.replace(/^[*\u2022]\s*/, '')
+		.replace(/\s+/g, ' ')
+		.trim()
+
+	if (!normalized || normalized.toLowerCase() === 'comfyui') {
+		return undefined
+	}
+
+	return normalized
+}
+
+function deriveLiveExportWorkflowTitle(pageTitle: string | undefined): string | undefined {
+	if (!pageTitle) {
+		return undefined
+	}
+
+	const candidates = [
+		pageTitle.replace(/\s*[-|]\s*ComfyUI$/i, ''),
+		pageTitle.replace(/^ComfyUI\s*[-|]\s*/i, ''),
+		pageTitle
+	]
+
+	for (const candidate of candidates) {
+		const workflowTitle = sanitizeLiveWorkflowTitle(candidate)
+		if (workflowTitle) {
+			return workflowTitle
+		}
+	}
+
+	return undefined
 }
 
 function getReadableErrorMessage(error: unknown): string {

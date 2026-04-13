@@ -89,7 +89,7 @@ def _extract_output_filename(video: Any) -> str | None:
     VHS ``VideoCombine`` outputs a dict (``VHS_FILENAMES``) with keys like
     ``gifs``, ``videos``, or ``filenames``.  Each entry is a list of dicts that
     may contain ``filename`` and ``subfolder``.
-    A plain ``STRING`` input is returned as-is.
+    A plain string value is returned as-is when provided programmatically.
     """
     if isinstance(video, str):
         return video.strip() or None
@@ -132,9 +132,8 @@ class JobEventEmitterNode:
     def INPUT_TYPES(cls) -> dict:  # type: ignore[override]
         return {
             "required": {
-                # Accepts VHS_FILENAMES (from VideoCombine "Filenames" output)
-                # or a plain STRING filename for simpler workflows.
-                "video": (["VHS_FILENAMES", "STRING"],),
+                # Accepts the typed VHS filenames payload from VideoCombine.
+                "video": ("VHS_FILENAMES",),
             },
             "optional": {
                 # Explicitly-provided app job id.  Leave blank to fall back to

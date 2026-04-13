@@ -383,7 +383,14 @@ def _validate_live_export_request_id(value: Any) -> str:
 
 def _live_export_metadata_from_payload(payload: dict[str, Any]) -> dict[str, str]:
     metadata: dict[str, str] = {}
-    for key in ("clientId", "graphId", "frontendVersion", "exportedAt"):
+    for key in (
+        "clientId",
+        "graphId",
+        "frontendVersion",
+        "exportedAt",
+        "workflowTitle",
+        "pageTitle",
+    ):
         value = payload.get(key)
         if isinstance(value, str) and value:
             metadata[key] = value

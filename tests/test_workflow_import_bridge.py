@@ -70,6 +70,8 @@ class WorkflowImportBridgeTests(unittest.TestCase):
                         "clientId": "browser-client-id",
                         "graphId": "graph-id-if-known",
                         "frontendVersion": "1.41.16",
+                        "workflowTitle": "LTX 2.3 IC LoRA",
+                        "pageTitle": "LTX 2.3 IC LoRA - ComfyUI",
                         "exportedAt": "2026-04-13T12:34:56.000Z",
                     }
                 )
@@ -99,6 +101,8 @@ class WorkflowImportBridgeTests(unittest.TestCase):
                     "clientId": "browser-client-id",
                     "graphId": "graph-id-if-known",
                     "frontendVersion": "1.41.16",
+                    "workflowTitle": "LTX 2.3 IC LoRA",
+                    "pageTitle": "LTX 2.3 IC LoRA - ComfyUI",
                     "exportedAt": "2026-04-13T12:34:56.000Z",
                 },
             },
