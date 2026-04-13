@@ -83,12 +83,17 @@ def _post_event(payload: dict[str, Any]) -> None:
 
 def _extract_output_filename(video: Any) -> str | None:
     """
-    Try to extract a usable filename from the VHS video output dict.
+    Try to extract a usable filename from the VHS video output dict or a plain
+    string path.
 
-    VHS ``SaveVideo`` / ``CreateVideo`` nodes return a dict with keys like
+    VHS ``VideoCombine`` outputs a dict (``VHS_FILENAMES``) with keys like
     ``gifs``, ``videos``, or ``filenames``.  Each entry is a list of dicts that
     may contain ``filename`` and ``subfolder``.
+    A plain ``STRING`` input is returned as-is.
     """
+    if isinstance(video, str):
+        return video.strip() or None
+
     if not isinstance(video, dict):
         return None
 
@@ -127,7 +132,9 @@ class JobEventEmitterNode:
     def INPUT_TYPES(cls) -> dict:  # type: ignore[override]
         return {
             "required": {
-                "video": ("VHS_FILENAMES",),
+                # Accepts VHS_FILENAMES (from VideoCombine "Filenames" output)
+                # or a plain STRING filename for simpler workflows.
+                "video": (["VHS_FILENAMES", "STRING"],),
             },
             "optional": {
                 # Explicitly-provided app job id.  Leave blank to fall back to
