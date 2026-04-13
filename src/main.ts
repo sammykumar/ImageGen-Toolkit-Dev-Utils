@@ -1,3 +1,4 @@
+import { api } from '../../../scripts/api.js'
 import { app } from '../../../scripts/app.js'
 
 declare const __IMAGEGEN_TOOLKIT_BUILD_INFO__: {
@@ -48,7 +49,69 @@ type NodeTypeLike = {
 
 type ExtensionLike = {
 	name: string
+	setup?: () => void | Promise<void>
 	beforeRegisterNodeDef?: (nodeType: NodeTypeLike, nodeData: NodeDefinitionLike) => void
+}
+
+type GraphToPromptResult = {
+	output?: Record<string, unknown>
+}
+
+type LiveExportRequestDetail = {
+	requestId?: string
+}
+
+type LiveExportSuccessPayload = {
+	requestId: string
+	ok: true
+	apiPrompt: Record<string, unknown>
+	clientId?: string
+	graphId?: string
+	frontendVersion?: string
+	exportedAt: string
+}
+
+type LiveExportFailurePayload = {
+	requestId: string
+	ok: false
+	error: {
+		code: 'graph_to_prompt_failed' | 'invalid_export_shape'
+		message: string
+	}
+	clientId?: string
+	graphId?: string
+	frontendVersion?: string
+	exportedAt: string
+}
+
+type LiveExportPayload = LiveExportSuccessPayload | LiveExportFailurePayload
+
+type LiveExportMetadata = {
+	clientId?: string
+	graphId?: string
+	frontendVersion?: string
+}
+
+type AppWithLiveExport = typeof app & {
+	api?: {
+		clientId?: string
+	}
+	graphToPrompt?: () => Promise<GraphToPromptResult>
+}
+
+declare global {
+	interface WindowEventMap {
+		'imagegen-toolkit.live-export.request': CustomEvent<LiveExportRequestDetail>
+	}
+
+	var graph:
+		| {
+			id?: string
+			extra?: {
+				frontendVersion?: string
+			}
+		}
+		| undefined
 }
 
 const TARGET_NODE_NAME = 'load-video-url'
@@ -58,8 +121,97 @@ const DEFAULT_PREVIEW_ASPECT_RATIO = 16 / 9
 const MIN_PREVIEW_HEIGHT = 120
 const NODE_CHROME_HEIGHT = 120
 const EXTENSION_NAME = 'imagegen-toolkit-dev-utils.load-video-url-preview'
+const LIVE_EXPORT_EVENT = 'imagegen-toolkit.live-export.request'
+const LIVE_EXPORT_RESULT_PATH = '/image-gen-toolkit/live-export/result'
+const LIVE_EXPORT_EXTENSION_NAME = 'imagegen-toolkit-dev-utils.live-export-bridge'
+
+let liveExportListenerRegistered = false
 
 console.info(`[${EXTENSION_NAME}] build`, __IMAGEGEN_TOOLKIT_BUILD_INFO__)
+
+function getLiveExportMetadata(): LiveExportMetadata {
+	const liveExportApp = app as AppWithLiveExport
+
+	return {
+		clientId: liveExportApp.api?.clientId,
+		graphId: globalThis.graph?.id,
+		frontendVersion: globalThis.graph?.extra?.frontendVersion
+	}
+}
+
+function getReadableErrorMessage(error: unknown): string {
+	if (error instanceof Error && error.message.trim()) {
+		return error.message
+	}
+
+	if (typeof error === 'string' && error.trim()) {
+		return error
+	}
+
+	return 'Live export failed in the ComfyUI frontend runtime'
+}
+
+async function postLiveExportResult(payload: LiveExportPayload) {
+	await api.fetchApi(LIVE_EXPORT_RESULT_PATH, {
+		method: 'POST',
+		headers: {
+			'Content-Type': 'application/json'
+		},
+		body: JSON.stringify(payload)
+	})
+}
+
+async function handleLiveExportRequest(event: CustomEvent<LiveExportRequestDetail>) {
+	const requestId = event.detail?.requestId?.trim()
+	if (!requestId) {
+		return
+	}
+
+	const metadata = getLiveExportMetadata()
+	const exportedAt = new Date().toISOString()
+	const liveExportApp = app as AppWithLiveExport
+
+	try {
+		const graphToPrompt = liveExportApp.graphToPrompt
+		if (typeof graphToPrompt !== 'function') {
+			throw new Error('app.graphToPrompt is unavailable')
+		}
+
+		const { output } = await graphToPrompt.call(liveExportApp)
+		if (!output || typeof output !== 'object' || Array.isArray(output)) {
+			await postLiveExportResult({
+				requestId,
+				ok: false,
+				error: {
+					code: 'invalid_export_shape',
+					message: 'app.graphToPrompt() returned an invalid apiPrompt payload'
+				},
+				...metadata,
+				exportedAt
+			})
+			return
+		}
+
+		await postLiveExportResult({
+			requestId,
+			ok: true,
+			apiPrompt: output,
+			...metadata,
+			exportedAt
+		})
+	} catch (error) {
+		await postLiveExportResult({
+			requestId,
+			ok: false,
+			error: {
+				code: 'graph_to_prompt_failed',
+				message: getReadableErrorMessage(error)
+			},
+			...metadata,
+			exportedAt
+		})
+	}
+}
 
 function getVideoUrlWidget(node: NodeLike): WidgetLike | undefined {
 	return node.widgets?.find((widget) => widget.name === 'video_url')
@@ -245,7 +397,7 @@ function attachPreview(node: NodeLike) {
 
 app.registerExtension({
 	name: EXTENSION_NAME,
-	beforeRegisterNodeDef(nodeType, nodeData) {
+	beforeRegisterNodeDef(nodeType: NodeTypeLike, nodeData: NodeDefinitionLike) {
 		if (nodeData.name !== TARGET_NODE_NAME) {
 			return
 		}
@@ -264,5 +416,17 @@ app.registerExtension({
 			this.__loadVideoUrlPreviewState?.sync()
 			return result
 		}
+	}
+})
+
+app.registerExtension({
+	name: LIVE_EXPORT_EXTENSION_NAME,
+	async setup() {
+		if (liveExportListenerRegistered) {
+			return
+		}
+
+		api.addEventListener(LIVE_EXPORT_EVENT, handleLiveExportRequest)
+		liveExportListenerRegistered = true
 	}
 })

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import json
 from dataclasses import dataclass
@@ -11,12 +12,26 @@ from typing import Any
 WORKFLOW_IMPORT_LIST_PATH = "/api/image-gen-toolkit/workflows/importable"
 WORKFLOW_IMPORT_CONTENT_PATH = "/api/image-gen-toolkit/workflows/importable/content"
 USERDATA_WORKFLOWS_PREFIX = "workflows"
+LIVE_EXPORT_REQUEST_PATH = "/api/image-gen-toolkit/live-export/request"
+LIVE_EXPORT_RESULT_PATH = "/api/image-gen-toolkit/live-export/result"
+LIVE_EXPORT_EVENT = "imagegen-toolkit.live-export.request"
+LIVE_EXPORT_TIMEOUT_SECONDS = 30.0
 
 _LGRAPH_MODE_BYPASS: int = 4
 _LGRAPH_MODE_NEVER: int = 2
 _FRONTEND_ONLY_NODE_TYPES: frozenset[str] = frozenset({"Note", "Reroute"})
 _WIDGET_PRIMITIVE_TYPES: frozenset[str] = frozenset({"INT", "FLOAT", "STRING", "BOOLEAN"})
 _DYNAMIC_COMBO_V3_TYPE: str = "COMFY_DYNAMICCOMBO_V3"
+
+
+@dataclass
+class PendingLiveExport:
+    request_id: str
+    future: asyncio.Future[dict[str, Any]]
+    created_at: float
+
+
+_pending_live_exports: dict[str, PendingLiveExport] = {}
 
 
 class WorkflowImportConversionError(ValueError):
@@ -360,6 +375,96 @@ def get_importable_workflow_content(
     return payload
 
 
+def _validate_live_export_request_id(value: Any) -> str:
+    if not isinstance(value, str) or not value.strip():
+        raise ValueError("requestId is required")
+    return value.strip()
+
+
+def _live_export_metadata_from_payload(payload: dict[str, Any]) -> dict[str, str]:
+    metadata: dict[str, str] = {}
+    for key in ("clientId", "graphId", "frontendVersion", "exportedAt"):
+        value = payload.get(key)
+        if isinstance(value, str) and value:
+            metadata[key] = value
+    return metadata
+
+
+def _validate_live_export_result_payload(payload: Any) -> dict[str, Any]:
+    if not isinstance(payload, dict):
+        raise ValueError("request body must be a JSON object")
+
+    request_id = _validate_live_export_request_id(payload.get("requestId"))
+    ok = payload.get("ok")
+    if not isinstance(ok, bool):
+        raise ValueError("ok must be a boolean")
+
+    result: dict[str, Any] = {
+        "requestId": request_id,
+        "ok": ok,
+    }
+    result.update(_live_export_metadata_from_payload(payload))
+
+    if ok:
+        api_prompt = payload.get("apiPrompt")
+        if not isinstance(api_prompt, dict):
+            raise ValueError("apiPrompt must be an object")
+        result["apiPrompt"] = api_prompt
+        return result
+
+    error = payload.get("error")
+    if not isinstance(error, dict):
+        raise ValueError("error must be an object")
+    message = error.get("message")
+    if not isinstance(message, str) or not message.strip():
+        raise ValueError("error.message is required")
+
+    code = error.get("code")
+    if not isinstance(code, str) or not code.strip():
+        code = "graph_to_prompt_failed"
+
+    result["error"] = {
+        "code": code,
+        "message": message.strip(),
+    }
+    return result
+
+
+async def _read_json_body(request: Any) -> dict[str, Any]:
+    try:
+        payload = await request.json()
+    except Exception as exc:
+        raise ValueError("request body must be valid JSON") from exc
+
+    if not isinstance(payload, dict):
+        raise ValueError("request body must be a JSON object")
+    return payload
+
+
+def _build_live_export_success_response(result: dict[str, Any]) -> dict[str, Any]:
+    response: dict[str, Any] = {
+        "ok": True,
+        "requestId": result["requestId"],
+        "apiPrompt": result["apiPrompt"],
+    }
+    metadata = _live_export_metadata_from_payload(result)
+    if metadata:
+        response["metadata"] = metadata
+    return response
+
+
+def _build_live_export_failure_response(result: dict[str, Any]) -> dict[str, Any]:
+    response: dict[str, Any] = {
+        "ok": False,
+        "requestId": result["requestId"],
+        "error": result["error"],
+    }
+    metadata = _live_export_metadata_from_payload(result)
+    if metadata:
+        response["metadata"] = metadata
+    return response
+
+
 def _is_widget_input(type_def: Any) -> bool:
     """True for list/tuple combo choices and primitive scalar types.
 
@@ -504,11 +609,19 @@ def _convert_workflow_json_to_api_prompt(
         optional: dict[str, Any] = input_types.get("optional", {}) or {}
 
         # Build connected_links: input_name -> link_id
+        # Primary source: node["inputs"][slot].link  (standard LiteGraph).
+        # Fallback: input_link_map (global links array), used when custom
+        # reroute/pass-through nodes leave inputs[slot].link as null in the
+        # LiteGraph JSON even though a real connection exists in "links".
         connected_links: dict[str, int] = {}
-        for inp in node.get("inputs", []):
+        for slot, inp in enumerate(node.get("inputs", [])):
             inp_link = inp.get("link")
             if inp_link is not None:
                 connected_links[inp["name"]] = int(inp_link)
+            else:
+                fallback_lnk = input_link_map.get((node_id, slot))
+                if fallback_lnk is not None:
+                    connected_links[inp["name"]] = fallback_lnk
 
         raw_wv = node.get("widgets_values", [])
         widgets_values: list[Any] = raw_wv if isinstance(raw_wv, list) else []
@@ -700,6 +813,104 @@ def _register_routes() -> None:
             return web.json_response({"error": str(exc)}, status=404)
 
         return web.json_response(payload)
+
+    @routes.post(LIVE_EXPORT_REQUEST_PATH)
+    async def request_live_export_route(request):
+        try:
+            payload = await _read_json_body(request)
+            request_id = _validate_live_export_request_id(payload.get("requestId"))
+        except ValueError as exc:
+            return web.json_response({"error": str(exc)}, status=400)
+
+        if request_id in _pending_live_exports:
+            print(f"[live-export] duplicate requestId rejected requestId={request_id}")
+            return web.json_response(
+                {
+                    "error": "duplicate live export requestId",
+                    "code": "duplicate_request_id",
+                },
+                status=409,
+            )
+
+        if _pending_live_exports:
+            print(f"[live-export] request rejected busy requestId={request_id}")
+            return web.json_response(
+                {
+                    "error": "live export already in progress",
+                    "code": "live_export_in_progress",
+                },
+                status=409,
+            )
+
+        loop = asyncio.get_running_loop()
+        pending = PendingLiveExport(
+            request_id=request_id,
+            future=loop.create_future(),
+            created_at=loop.time(),
+        )
+        _pending_live_exports[request_id] = pending
+        print(f"[live-export] request received requestId={request_id}")
+
+        try:
+            prompt_server.send_sync(LIVE_EXPORT_EVENT, {"requestId": request_id})
+            print(f"[live-export] request broadcast requestId={request_id}")
+            result = await asyncio.wait_for(
+                pending.future,
+                timeout=LIVE_EXPORT_TIMEOUT_SECONDS,
+            )
+        except asyncio.TimeoutError:
+            print(f"[live-export] request timed out requestId={request_id}")
+            return web.json_response(
+                {
+                    "error": "live export timed out",
+                    "code": "live_export_timeout",
+                    "requestId": request_id,
+                },
+                status=504,
+            )
+        finally:
+            _pending_live_exports.pop(request_id, None)
+
+        if result["ok"]:
+            return web.json_response(_build_live_export_success_response(result))
+
+        print(f"[live-export] frontend failure relayed requestId={request_id}")
+        return web.json_response(
+            _build_live_export_failure_response(result),
+            status=502,
+        )
+
+    @routes.post(LIVE_EXPORT_RESULT_PATH)
+    async def post_live_export_result_route(request):
+        try:
+            result = _validate_live_export_result_payload(await _read_json_body(request))
+        except ValueError as exc:
+            return web.json_response({"error": str(exc)}, status=400)
+
+        request_id = result["requestId"]
+        pending = _pending_live_exports.get(request_id)
+        if pending is None:
+            print(f"[live-export] orphan result ignored requestId={request_id}")
+            return web.json_response(
+                {
+                    "error": "no pending live export request",
+                    "requestId": request_id,
+                },
+                status=404,
+            )
+
+        if pending.future.done():
+            return web.json_response(
+                {
+                    "error": "live export request already resolved",
+                    "requestId": request_id,
+                },
+                status=409,
+            )
+
+        pending.future.set_result(result)
+        print(f"[live-export] result accepted requestId={request_id}")
+        return web.json_response({"ok": True})
 
 
 _register_routes()

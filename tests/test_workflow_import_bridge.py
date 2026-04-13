@@ -31,6 +31,260 @@ class WorkflowImportBridgeTests(unittest.TestCase):
 			"/api/image-gen-toolkit/workflows/importable/content",
             routes.handlers,
         )
+        self.assertIn(module.LIVE_EXPORT_REQUEST_PATH, routes.handlers)
+        self.assertIn(module.LIVE_EXPORT_RESULT_PATH, routes.handlers)
+
+    def test_live_export_request_route_returns_success_payload_from_result(self):
+        routes = _FakeRoutes()
+        prompt_server = _FakePromptServer(routes)
+        module = _import_bridge_with_route_stubs(routes, prompt_server)
+        request_handler = routes.handlers[module.LIVE_EXPORT_REQUEST_PATH]
+        result_handler = routes.handlers[module.LIVE_EXPORT_RESULT_PATH]
+
+        async def run_test():
+            request_task = asyncio.create_task(
+                request_handler(_FakeRequest(json_body={"requestId": "req-success"}))
+            )
+            await asyncio.sleep(0)
+
+            self.assertEqual(
+                prompt_server.sent_events,
+                [(module.LIVE_EXPORT_EVENT, {"requestId": "req-success"})],
+            )
+            self.assertIn("req-success", module._pending_live_exports)
+
+            result_response = await result_handler(
+                _FakeRequest(
+                    json_body={
+                        "requestId": "req-success",
+                        "ok": True,
+                        "apiPrompt": {
+                            "5098": {
+                                "inputs": {
+                                    "sampler_name": "euler_ancestral_cfg_pp"
+                                },
+                                "class_type": "KSamplerSelect",
+                                "_meta": {"title": "KSamplerSelect"},
+                            }
+                        },
+                        "clientId": "browser-client-id",
+                        "graphId": "graph-id-if-known",
+                        "frontendVersion": "1.41.16",
+                        "exportedAt": "2026-04-13T12:34:56.000Z",
+                    }
+                )
+            )
+            request_response = await request_task
+            return result_response, request_response
+
+        result_response, request_response = asyncio.run(run_test())
+
+        self.assertEqual(result_response, {"payload": {"ok": True}, "status": 200})
+        self.assertEqual(request_response["status"], 200)
+        self.assertEqual(
+            request_response["payload"],
+            {
+                "ok": True,
+                "requestId": "req-success",
+                "apiPrompt": {
+                    "5098": {
+                        "inputs": {
+                            "sampler_name": "euler_ancestral_cfg_pp"
+                        },
+                        "class_type": "KSamplerSelect",
+                        "_meta": {"title": "KSamplerSelect"},
+                    }
+                },
+                "metadata": {
+                    "clientId": "browser-client-id",
+                    "graphId": "graph-id-if-known",
+                    "frontendVersion": "1.41.16",
+                    "exportedAt": "2026-04-13T12:34:56.000Z",
+                },
+            },
+        )
+        self.assertEqual(module._pending_live_exports, {})
+
+    def test_live_export_request_route_times_out_and_cleans_up_pending_registry(self):
+        routes = _FakeRoutes()
+        prompt_server = _FakePromptServer(routes)
+        module = _import_bridge_with_route_stubs(routes, prompt_server)
+        request_handler = routes.handlers[module.LIVE_EXPORT_REQUEST_PATH]
+
+        with mock.patch.object(module, "LIVE_EXPORT_TIMEOUT_SECONDS", 0.001):
+            response = asyncio.run(
+                request_handler(_FakeRequest(json_body={"requestId": "req-timeout"}))
+            )
+
+        self.assertEqual(response["status"], 504)
+        self.assertEqual(
+            response["payload"],
+            {
+                "error": "live export timed out",
+                "code": "live_export_timeout",
+                "requestId": "req-timeout",
+            },
+        )
+        self.assertEqual(
+            prompt_server.sent_events,
+            [(module.LIVE_EXPORT_EVENT, {"requestId": "req-timeout"})],
+        )
+        self.assertEqual(module._pending_live_exports, {})
+
+    def test_live_export_request_route_rejects_concurrent_requests_with_409(self):
+        routes = _FakeRoutes()
+        prompt_server = _FakePromptServer(routes)
+        module = _import_bridge_with_route_stubs(routes, prompt_server)
+        request_handler = routes.handlers[module.LIVE_EXPORT_REQUEST_PATH]
+        result_handler = routes.handlers[module.LIVE_EXPORT_RESULT_PATH]
+
+        async def run_test():
+            first_request = asyncio.create_task(
+                request_handler(_FakeRequest(json_body={"requestId": "req-one"}))
+            )
+            await asyncio.sleep(0)
+
+            second_response = await request_handler(
+                _FakeRequest(json_body={"requestId": "req-two"})
+            )
+
+            await result_handler(
+                _FakeRequest(
+                    json_body={
+                        "requestId": "req-one",
+                        "ok": True,
+                        "apiPrompt": {},
+                    }
+                )
+            )
+            first_response = await first_request
+            return second_response, first_response
+
+        second_response, first_response = asyncio.run(run_test())
+
+        self.assertEqual(first_response["status"], 200)
+        self.assertEqual(second_response["status"], 409)
+        self.assertEqual(
+            second_response["payload"],
+            {
+                "error": "live export already in progress",
+                "code": "live_export_in_progress",
+            },
+        )
+
+    def test_live_export_request_route_relays_frontend_failure(self):
+        routes = _FakeRoutes()
+        prompt_server = _FakePromptServer(routes)
+        module = _import_bridge_with_route_stubs(routes, prompt_server)
+        request_handler = routes.handlers[module.LIVE_EXPORT_REQUEST_PATH]
+        result_handler = routes.handlers[module.LIVE_EXPORT_RESULT_PATH]
+
+        async def run_test():
+            request_task = asyncio.create_task(
+                request_handler(_FakeRequest(json_body={"requestId": "req-failure"}))
+            )
+            await asyncio.sleep(0)
+
+            result_response = await result_handler(
+                _FakeRequest(
+                    json_body={
+                        "requestId": "req-failure",
+                        "ok": False,
+                        "error": {
+                            "code": "graph_to_prompt_failed",
+                            "message": "Readable frontend error message",
+                        },
+                        "clientId": "browser-client-id",
+                        "exportedAt": "2026-04-13T12:34:56.000Z",
+                    }
+                )
+            )
+            request_response = await request_task
+            return result_response, request_response
+
+        result_response, request_response = asyncio.run(run_test())
+
+        self.assertEqual(result_response, {"payload": {"ok": True}, "status": 200})
+        self.assertEqual(request_response["status"], 502)
+        self.assertEqual(
+            request_response["payload"],
+            {
+                "ok": False,
+                "requestId": "req-failure",
+                "error": {
+                    "code": "graph_to_prompt_failed",
+                    "message": "Readable frontend error message",
+                },
+                "metadata": {
+                    "clientId": "browser-client-id",
+                    "exportedAt": "2026-04-13T12:34:56.000Z",
+                },
+            },
+        )
+        self.assertEqual(module._pending_live_exports, {})
+
+    def test_live_export_result_route_returns_404_for_orphan_result(self):
+        routes = _FakeRoutes()
+        module = _import_bridge_with_route_stubs(routes)
+        result_handler = routes.handlers[module.LIVE_EXPORT_RESULT_PATH]
+
+        response = asyncio.run(
+            result_handler(
+                _FakeRequest(
+                    json_body={
+                        "requestId": "req-orphan",
+                        "ok": True,
+                        "apiPrompt": {},
+                    }
+                )
+            )
+        )
+
+        self.assertEqual(response["status"], 404)
+        self.assertEqual(
+            response["payload"],
+            {
+                "error": "no pending live export request",
+                "requestId": "req-orphan",
+            },
+        )
+
+    def test_live_export_success_cleanup_rejects_late_follow_up_result(self):
+        routes = _FakeRoutes()
+        prompt_server = _FakePromptServer(routes)
+        module = _import_bridge_with_route_stubs(routes, prompt_server)
+        request_handler = routes.handlers[module.LIVE_EXPORT_REQUEST_PATH]
+        result_handler = routes.handlers[module.LIVE_EXPORT_RESULT_PATH]
+
+        async def run_test():
+            request_task = asyncio.create_task(
+                request_handler(_FakeRequest(json_body={"requestId": "req-cleanup"}))
+            )
+            await asyncio.sleep(0)
+
+            payload = {
+                "requestId": "req-cleanup",
+                "ok": True,
+                "apiPrompt": {},
+            }
+            first_result = await result_handler(_FakeRequest(json_body=payload))
+            request_response = await request_task
+            late_result = await result_handler(_FakeRequest(json_body=payload))
+            return first_result, request_response, late_result
+
+        first_result, request_response, late_result = asyncio.run(run_test())
+
+        self.assertEqual(first_result, {"payload": {"ok": True}, "status": 200})
+        self.assertEqual(request_response["status"], 200)
+        self.assertEqual(module._pending_live_exports, {})
+        self.assertEqual(late_result["status"], 404)
+        self.assertEqual(
+            late_result["payload"],
+            {
+                "error": "no pending live export request",
+                "requestId": "req-cleanup",
+            },
+        )
 
     def test_list_importable_workflows_returns_individually_selectable_catalog(self):
         module = importlib.import_module("workflow_import_bridge")
@@ -568,8 +822,15 @@ class WorkflowImportBridgeTests(unittest.TestCase):
 
 
 class _FakeRequest:
-    def __init__(self, query):
-        self.rel_url = types.SimpleNamespace(query=query)
+    def __init__(self, query=None, json_body=None, json_error=None):
+        self.rel_url = types.SimpleNamespace(query=query or {})
+        self._json_body = json_body
+        self._json_error = json_error
+
+    async def json(self):
+        if self._json_error is not None:
+            raise self._json_error
+        return self._json_body
 
 
 class _FakeRoutes:
@@ -583,13 +844,29 @@ class _FakeRoutes:
 
         return decorator
 
+    def post(self, path):
+        def decorator(handler):
+            self.handlers[path] = handler
+            return handler
 
-def _import_bridge_with_route_stubs(routes):
+        return decorator
+
+
+class _FakePromptServer:
+    def __init__(self, routes):
+        self.routes = routes
+        self.sent_events = []
+
+    def send_sync(self, event, payload):
+        self.sent_events.append((event, payload))
+
+
+def _import_bridge_with_route_stubs(routes, prompt_server=None):
     sys.modules.pop("workflow_import_bridge", None)
     server_module = types.ModuleType("server")
-    server_module.PromptServer = types.SimpleNamespace(
-        instance=types.SimpleNamespace(routes=routes)
-    )
+    if prompt_server is None:
+        prompt_server = _FakePromptServer(routes)
+    server_module.PromptServer = types.SimpleNamespace(instance=prompt_server)
     aiohttp_module = types.ModuleType("aiohttp")
     aiohttp_module.web = _FakeWebModule()
 
@@ -865,6 +1142,47 @@ class WorkflowJsonConversionTests(unittest.TestCase):
         # Unknown-class node (11) must NOT appear in output
         self.assertNotIn("11", result)
         # DstNode's image must resolve through the unknown node to the real source
+        self.assertEqual(result["12"]["inputs"]["image"], ["10", 0])
+
+    def test_dst_node_captures_link_when_its_own_inputs_slot_link_is_null(self):
+        """The IMMEDIATE link into a real (non-reroute) dst node may also have
+        link=null in the LiteGraph inputs[] while the connection still exists in
+        the workflow links array.  connected_links must fall back to input_link_map
+        so the input is not silently dropped — this is the root cause of the
+        5119/5140/5175 failures in the ltx-2.3-ic-lora workflow."""
+
+        class SrcNode:
+            @classmethod
+            def INPUT_TYPES(cls):
+                return {"required": {}, "optional": {}}
+
+        class DstNode:
+            @classmethod
+            def INPUT_TYPES(cls):
+                return {"required": {"image": ("IMAGE", {})}, "optional": {}}
+
+        workflow = {
+            "nodes": [
+                {"id": 10, "type": "SrcNode", "mode": 0, "inputs": [], "widgets_values": []},
+                # DstNode has link=null in its own inputs[] for "image" slot 0,
+                # but the links array records the real connection.
+                {
+                    "id": 12,
+                    "type": "DstNode",
+                    "mode": 0,
+                    "inputs": [{"name": "image", "type": "IMAGE", "link": None}],
+                    "widgets_values": [],
+                },
+            ],
+            "links": [
+                # Direct connection 10→12 — link field in 12's inputs[] is null
+                [500, 10, 0, 12, 0, "IMAGE"],
+            ],
+        }
+
+        result = self._convert(workflow, {"SrcNode": SrcNode, "DstNode": DstNode})
+
+        # Without the fix, "image" would be absent because link=null was ignored.
         self.assertEqual(result["12"]["inputs"]["image"], ["10", 0])
 
     def test_chain_resolution_uses_links_array_when_node_inputs_have_null_link(self):
