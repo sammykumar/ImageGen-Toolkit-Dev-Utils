@@ -818,6 +818,55 @@ class WorkflowJsonConversionTests(unittest.TestCase):
         result = self._convert(workflow, {"MockNode": MockNode})
         self.assertNotIn("77", result)
 
+    def test_unknown_class_node_treated_as_transparent_for_chain_resolution(self):
+        """Nodes whose class is not in NODE_CLASS_MAPPINGS must be treated as
+        transparent so that downstream nodes' link references chain through them
+        to the real source (same behavior as Reroute nodes)."""
+
+        class SrcNode:
+            @classmethod
+            def INPUT_TYPES(cls):
+                return {"required": {}, "optional": {}}
+
+        class DstNode:
+            @classmethod
+            def INPUT_TYPES(cls):
+                return {"required": {"image": ("IMAGE", {})}, "optional": {}}
+
+        workflow = {
+            "nodes": [
+                # Real source node (class known)
+                {"id": 10, "type": "SrcNode", "mode": 0, "inputs": [], "widgets_values": []},
+                # Unknown-class pass-through (e.g. a custom Reroute variant)
+                {
+                    "id": 11,
+                    "type": "SomeCustomRerouteVariant",
+                    "mode": 0,
+                    "inputs": [{"name": "value", "type": "*", "link": 100}],
+                    "widgets_values": [],
+                },
+                # Destination node (class known)
+                {
+                    "id": 12,
+                    "type": "DstNode",
+                    "mode": 0,
+                    "inputs": [{"name": "image", "type": "IMAGE", "link": 200}],
+                    "widgets_values": [],
+                },
+            ],
+            "links": [
+                [100, 10, 0, 11, 0, "*"],
+                [200, 11, 0, 12, 0, "IMAGE"],
+            ],
+        }
+
+        result = self._convert(workflow, {"SrcNode": SrcNode, "DstNode": DstNode})
+
+        # Unknown-class node (11) must NOT appear in output
+        self.assertNotIn("11", result)
+        # DstNode's image must resolve through the unknown node to the real source
+        self.assertEqual(result["12"]["inputs"]["image"], ["10", 0])
+
     def test_unknown_node_type_skipped(self):
         workflow = {
             "nodes": [

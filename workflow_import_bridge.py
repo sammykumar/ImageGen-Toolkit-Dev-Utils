@@ -473,6 +473,9 @@ def _convert_workflow_json_to_api_prompt(
         node_type = node.get("type", "")
         cls = nodes_map.get(node_type)
         if cls is None:
+            # Treat unknown-class nodes as transparent so post-processing can
+            # resolve chains through them (e.g. custom Reroute variants).
+            skipped_ids.add(node_id)
             continue
 
         try:
