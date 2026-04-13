@@ -5,16 +5,16 @@ Accepts a finished video output and POSTs a ``job_completed`` event to the
 configured app webhook (``IMAGEGEN_EVENTS_URL`` / ``IMAGEGEN_EVENT_TOKEN``).
 
 On failure the node logs a warning and passes the video through unchanged so the
-workflow does not hard-fail.  The caller is responsible for configuring the two
+workflow does not hard-fail. The caller is responsible for configuring the two
 environment variables:
 
     IMAGEGEN_EVENTS_URL   — full URL of the POST endpoint, e.g.
                              https://my-app.vercel.app/api/comfyui/events
     IMAGEGEN_EVENT_TOKEN  — Bearer token matching COMFYUI_EVENT_TOKEN on the app
 
-The node infers the ComfyUI ``prompt_id`` from the hidden ``unique_id`` input
-so it can be included in the payload as ``comfyui_run_id``.  The app uses this
-to resolve the associated durable job when no explicit ``job_id`` is provided.
+When ComfyUI exposes execution metadata through hidden inputs, the node includes
+the real execution ``prompt_id`` as ``comfyui_run_id``. It never uses the graph
+node ``unique_id`` as a stand-in for the execution id.
 """
 
 from __future__ import annotations
@@ -113,6 +113,20 @@ def _extract_output_filename(video: Any) -> str | None:
     return None
 
 
+def _extract_prompt_id(prompt: Any) -> str | None:
+    """Return the true Comfy execution prompt_id when the runtime exposes it."""
+    if not isinstance(prompt, dict):
+        return None
+
+    prompt_id = prompt.get("prompt_id")
+    if isinstance(prompt_id, str):
+        trimmed = prompt_id.strip()
+        if trimmed:
+            return trimmed
+
+    return None
+
+
 class JobEventEmitterNode:
     """
     Emit a ``job_completed`` webhook event when generation finishes.
@@ -151,6 +165,9 @@ class JobEventEmitterNode:
                 # ComfyUI injects the node's unique graph id here.
                 # Note: this is the graph node id, not the execution prompt_id.
                 "unique_id": "UNIQUE_ID",
+                # The prompt payload may include execution metadata depending on
+                # the active ComfyUI runtime contract.
+                "prompt": "PROMPT",
             },
         }
 
@@ -159,10 +176,12 @@ class JobEventEmitterNode:
         video: Any,
         job_id: str = "",
         unique_id: str | None = None,
+        prompt: Any = None,
     ) -> tuple[Any]:
         output_filename = _extract_output_filename(video)
 
         effective_job_id = job_id.strip() if job_id else ""
+        comfyui_run_id = _extract_prompt_id(prompt)
 
         payload: dict[str, Any] = {
             "event_type": "job_completed",
@@ -170,10 +189,10 @@ class JobEventEmitterNode:
             "timestamp": datetime.datetime.now(datetime.timezone.utc).isoformat(),
         }
 
-        # unique_id is the graph node id, not the execution prompt_id, so we
-        # omit comfyui_run_id here.  The app resolves the job via job_id when
-        # provided, or via the history fallback (resolveOutputFromHistory) on
-        # the server side when job_id is absent.
+        # unique_id is the graph node id, not the execution prompt_id.
+        # Only include comfyui_run_id when Comfy exposes a real prompt_id.
+        if comfyui_run_id:
+            payload["comfyui_run_id"] = comfyui_run_id
 
         if output_filename:
             payload["output_url"] = output_filename
