@@ -487,7 +487,8 @@ def _convert_workflow_json_to_api_prompt(
             if inp_link is not None:
                 connected_links[inp["name"]] = int(inp_link)
 
-        widgets_values: list[Any] = node.get("widgets_values", [])
+        raw_wv = node.get("widgets_values", [])
+        widgets_values: list[Any] = raw_wv if isinstance(raw_wv, list) else []
         widget_idx = 0
         node_inputs: dict[str, Any] = {}
 
