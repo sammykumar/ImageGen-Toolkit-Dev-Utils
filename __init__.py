@@ -1,5 +1,15 @@
 from . import workflow_import_bridge as _workflow_import_bridge
-from .load_video_url_node import NODE_CLASS_MAPPINGS, NODE_DISPLAY_NAME_MAPPINGS
+from .load_video_url_node import (
+    NODE_CLASS_MAPPINGS as _VIDEO_URL_CLASSES,
+    NODE_DISPLAY_NAME_MAPPINGS as _VIDEO_URL_NAMES,
+)
+from .job_event_emitter_node import (
+    NODE_CLASS_MAPPINGS as _EVENT_EMITTER_CLASSES,
+    NODE_DISPLAY_NAME_MAPPINGS as _EVENT_EMITTER_NAMES,
+)
+
+NODE_CLASS_MAPPINGS = {**_VIDEO_URL_CLASSES, **_EVENT_EMITTER_CLASSES}
+NODE_DISPLAY_NAME_MAPPINGS = {**_VIDEO_URL_NAMES, **_EVENT_EMITTER_NAMES}
 
 WEB_DIRECTORY = "./js"
 REGISTERED_ROUTE_MODULES = (_workflow_import_bridge,)
