@@ -391,6 +391,7 @@ def _has_control_after_generate(config: dict[str, Any]) -> bool:
 def _resolve_reroute_chain(
     node_map: dict[int, Any],
     link_map: dict[int, tuple[int, int]],
+    input_link_map: dict[tuple[int, int], int],
     link_id: int,
     skipped_ids: set[int],
     visited: set[int] | None = None,
@@ -410,19 +411,27 @@ def _resolve_reroute_chain(
     if src_node_id not in skipped_ids:
         return (str(src_node_id), src_output_slot)
 
-    # Source is a skipped node (Reroute) — find its single input link and recurse
-    src_node = node_map.get(src_node_id)
-    if src_node is None:
+    # Source is a skipped node (Reroute/pass-through) — find its input link.
+    # Primary: use input_link_map (reliable for custom reroute node types whose
+    # LiteGraph inputs[] may store link as null or use a non-standard format).
+    next_link_id: int | None = input_link_map.get((src_node_id, 0))
+
+    if next_link_id is None:
+        # Fallback: scan the node's inputs array (covers standard Reroute nodes).
+        src_node = node_map.get(src_node_id)
+        if src_node:
+            for inp in src_node.get("inputs", []):
+                nl = inp.get("link")
+                if nl is not None:
+                    next_link_id = int(nl)
+                    break
+
+    if next_link_id is None:
         return None
 
-    for inp in src_node.get("inputs", []):
-        next_link_id = inp.get("link")
-        if next_link_id is not None:
-            return _resolve_reroute_chain(
-                node_map, link_map, int(next_link_id), skipped_ids, visited
-            )
-
-    return None
+    return _resolve_reroute_chain(
+        node_map, link_map, input_link_map, next_link_id, skipped_ids, visited
+    )
 
 
 def _convert_workflow_json_to_api_prompt(
@@ -448,6 +457,14 @@ def _convert_workflow_json_to_api_prompt(
     link_map: dict[int, tuple[int, int]] = {}
     for link in workflow.get("links", []):
         link_map[int(link[0])] = (int(link[1]), int(link[2]))
+
+    # Build input_link_map: (dstNodeId, dstInputSlot) -> linkId
+    # Used to resolve chains through custom reroute nodes whose LiteGraph
+    # inputs[] may not reliably carry the link field.
+    input_link_map: dict[tuple[int, int], int] = {}
+    for link in workflow.get("links", []):
+        if len(link) >= 5:
+            input_link_map[(int(link[3]), int(link[4]))] = int(link[0])
 
     # Build node_map: nodeId -> node
     node_map: dict[int, Any] = {}
@@ -513,7 +530,7 @@ def _convert_workflow_json_to_api_prompt(
                     widget_value = (
                         widgets_values[widget_idx]
                         if widget_idx < len(widgets_values)
-                        else None
+                        else config.get("default")
                     )
                     widget_idx += 1
                     if _has_control_after_generate(config):
@@ -538,10 +555,13 @@ def _convert_workflow_json_to_api_prompt(
                                 widget_idx += 1
                                 continue
                             fw_name = fw[0]
+                            fw_type_config: dict[str, Any] = (
+                                fw[1] if len(fw) > 1 and isinstance(fw[1], dict) else {}
+                            )
                             fw_value = (
                                 widgets_values[widget_idx]
                                 if widget_idx < len(widgets_values)
-                                else None
+                                else fw_type_config.get("default")
                             )
                             widget_idx += 1
                             if fw_value is not None:
@@ -614,25 +634,28 @@ def _convert_workflow_json_to_api_prompt(
             if src_id not in skipped_ids:
                 continue
 
-            # Source is a skipped node (e.g., Reroute) — resolve chain
-            src_node = node_map.get(src_id)
-            if src_node is None:
-                del inputs[input_name]
-                continue
+            # Source is a skipped node (e.g., Reroute) — resolve chain.
+            # Primary: use input_link_map (reliable for custom reroute types).
+            reroute_input_link: int | None = input_link_map.get((src_id, 0))
 
-            reroute_input_link: int | None = None
-            for inp in src_node.get("inputs", []):
-                lnk = inp.get("link")
-                if lnk is not None:
-                    reroute_input_link = int(lnk)
-                    break
+            if reroute_input_link is None:
+                # Fallback: scan the node's inputs array.
+                src_node = node_map.get(src_id)
+                if src_node is None:
+                    del inputs[input_name]
+                    continue
+                for inp in src_node.get("inputs", []):
+                    lnk = inp.get("link")
+                    if lnk is not None:
+                        reroute_input_link = int(lnk)
+                        break
 
             if reroute_input_link is None:
                 del inputs[input_name]
                 continue
 
             resolved = _resolve_reroute_chain(
-                node_map, link_map, reroute_input_link, skipped_ids
+                node_map, link_map, input_link_map, reroute_input_link, skipped_ids
             )
             if resolved:
                 inputs[input_name] = list(resolved)
