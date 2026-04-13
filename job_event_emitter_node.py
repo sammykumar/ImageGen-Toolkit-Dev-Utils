@@ -38,10 +38,22 @@ def _resolve_env(name: str) -> str | None:
     return os.environ.get(name, "").strip() or None
 
 
-def _post_event(payload: dict[str, Any]) -> None:
+def _resolve_setting_value(value: Any) -> str | None:
+    if not isinstance(value, str):
+        return None
+
+    trimmed = value.strip()
+    return trimmed or None
+
+
+def _post_event(
+    payload: dict[str, Any],
+    events_url: str | None = None,
+    event_token: str | None = None,
+) -> None:
     """POST ``payload`` as JSON to the configured events endpoint."""
-    events_url = _resolve_env(_ENV_EVENTS_URL)
-    event_token = _resolve_env(_ENV_EVENT_TOKEN)
+    events_url = _resolve_setting_value(events_url) or _resolve_env(_ENV_EVENTS_URL)
+    event_token = _resolve_setting_value(event_token) or _resolve_env(_ENV_EVENT_TOKEN)
 
     if not events_url:
         logger.warning(
@@ -160,6 +172,22 @@ class JobEventEmitterNode:
                         "placeholder": "app durable job id (optional)",
                     },
                 ),
+                "events_url": (
+                    "STRING",
+                    {
+                        "default": "",
+                        "multiline": False,
+                        "placeholder": "events webhook URL (optional)",
+                    },
+                ),
+                "event_token": (
+                    "STRING",
+                    {
+                        "default": "",
+                        "multiline": False,
+                        "placeholder": "events bearer token (optional)",
+                    },
+                ),
             },
             "hidden": {
                 # ComfyUI injects the node's unique graph id here.
@@ -175,6 +203,8 @@ class JobEventEmitterNode:
         self,
         video: Any,
         job_id: str = "",
+        events_url: str = "",
+        event_token: str = "",
         unique_id: str | None = None,
         prompt: Any = None,
     ) -> tuple[Any]:
@@ -197,7 +227,7 @@ class JobEventEmitterNode:
         if output_filename:
             payload["output_url"] = output_filename
 
-        _post_event(payload)
+        _post_event(payload, events_url=events_url, event_token=event_token)
 
         return (video,)
 

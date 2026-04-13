@@ -1,22 +1,50 @@
-import { api as I } from "../../../scripts/api.js";
-import { app as m } from "../../../scripts/app.js";
-var T = { commitHash: "7f92a2824bdc", packageVersion: "0.0.5" };
-const x = "load-video-url", P = "video_url_preview", y = 320, f = 16 / 9, R = 120, N = 120, b = "imagegen-toolkit-dev-utils.load-video-url-preview", A = "imagegen-toolkit.live-export.request", V = "/image-gen-toolkit/live-export/result", M = "imagegen-toolkit-dev-utils.live-export-bridge";
-let g = !1;
-console.info(`[${b}] build`, T);
-function O() {
-  var r, e, i, o;
+import { api as S } from "../../../scripts/api.js";
+import { app as E } from "../../../scripts/app.js";
+var x = { commitHash: "0ffbd7e4121e", packageVersion: "0.0.5" };
+const A = "load-video-url", P = "video_url_preview", y = "JobEventEmitter", U = "events_url", z = "event_token", h = ["ImageGen Toolkit", "Job Event Emitter"], L = "ImageGenToolkit.JobEventEmitter.eventsUrl", M = "ImageGenToolkit.JobEventEmitter.eventToken", I = 320, f = 16 / 9, G = 120, J = 120, O = "imagegen-toolkit-dev-utils.load-video-url-preview", W = "imagegen-toolkit.live-export.request", C = "/image-gen-toolkit/live-export/result", D = "imagegen-toolkit-dev-utils.live-export-bridge";
+let N = !1;
+console.info(`[${O}] build`, x);
+function H() {
+  var e, o, n, i;
+  const t = E, r = B(document.title);
   return {
-    clientId: (r = m.api) == null ? void 0 : r.clientId,
-    graphId: (e = globalThis.graph) == null ? void 0 : e.id,
-    frontendVersion: (o = (i = globalThis.graph) == null ? void 0 : i.extra) == null ? void 0 : o.frontendVersion
+    clientId: (e = t.api) == null ? void 0 : e.clientId,
+    graphId: (o = globalThis.graph) == null ? void 0 : o.id,
+    frontendVersion: (i = (n = globalThis.graph) == null ? void 0 : n.extra) == null ? void 0 : i.frontendVersion,
+    workflowTitle: X(r),
+    pageTitle: r
   };
 }
-function L(t) {
+function B(t) {
+  if (typeof t != "string")
+    return;
+  const r = t.replace(/\s+/g, " ").trim();
+  return r || void 0;
+}
+function F(t) {
+  const r = t.replace(/^[*\u2022]\s*/, "").replace(/\s+/g, " ").trim();
+  if (!(!r || r.toLowerCase() === "comfyui"))
+    return r;
+}
+function X(t) {
+  if (!t)
+    return;
+  const r = [
+    t.replace(/\s*[-|]\s*ComfyUI$/i, ""),
+    t.replace(/^ComfyUI\s*[-|]\s*/i, ""),
+    t
+  ];
+  for (const e of r) {
+    const o = F(e);
+    if (o)
+      return o;
+  }
+}
+function q(t) {
   return t instanceof Error && t.message.trim() ? t.message : typeof t == "string" && t.trim() ? t : "Live export failed in the ComfyUI frontend runtime";
 }
-async function v(t) {
-  await I.fetchApi(V, {
+async function m(t) {
+  await S.fetchApi(C, {
     method: "POST",
     headers: {
       "Content-Type": "application/json"
@@ -24,19 +52,19 @@ async function v(t) {
     body: JSON.stringify(t)
   });
 }
-async function S(t) {
-  var l, a;
-  const r = (a = (l = t.detail) == null ? void 0 : l.requestId) == null ? void 0 : a.trim();
+async function K(t) {
+  var i, s;
+  const r = (s = (i = t.detail) == null ? void 0 : i.requestId) == null ? void 0 : s.trim();
   if (!r)
     return;
-  const e = O(), i = (/* @__PURE__ */ new Date()).toISOString(), o = m;
+  const e = H(), o = (/* @__PURE__ */ new Date()).toISOString(), n = E;
   try {
-    const p = o.graphToPrompt;
-    if (typeof p != "function")
+    const c = n.graphToPrompt;
+    if (typeof c != "function")
       throw new Error("app.graphToPrompt is unavailable");
-    const { output: n } = await p.call(o);
-    if (!n || typeof n != "object" || Array.isArray(n)) {
-      await v({
+    const { output: a } = await c.call(n);
+    if (!a || typeof a != "object" || Array.isArray(a)) {
+      await m({
         requestId: r,
         ok: !1,
         error: {
@@ -44,35 +72,69 @@ async function S(t) {
           message: "app.graphToPrompt() returned an invalid apiPrompt payload"
         },
         ...e,
-        exportedAt: i
+        exportedAt: o
       });
       return;
     }
-    await v({
+    await m({
       requestId: r,
       ok: !0,
-      apiPrompt: n,
+      apiPrompt: a,
       ...e,
-      exportedAt: i
+      exportedAt: o
     });
-  } catch (p) {
-    await v({
+  } catch (c) {
+    await m({
       requestId: r,
       ok: !1,
       error: {
         code: "graph_to_prompt_failed",
-        message: L(p)
+        message: q(c)
       },
       ...e,
-      exportedAt: i
+      exportedAt: o
     });
   }
 }
-function _(t) {
+function w(t) {
   var r;
   return (r = t.widgets) == null ? void 0 : r.find((e) => e.name === "video_url");
 }
-function U(t) {
+function $(t, r) {
+  var e;
+  return (e = t.widgets) == null ? void 0 : e.find((o) => o.name === r);
+}
+function k(t) {
+  return typeof t != "string" ? "" : t.trim();
+}
+function b(t) {
+  var e, o;
+  const r = (e = E.ui) == null ? void 0 : e.settings;
+  return k((o = r == null ? void 0 : r.getSettingValue) == null ? void 0 : o.call(r, t, ""));
+}
+function V(t, r, e) {
+  const o = $(t, r);
+  return !o || k(o.value) === e ? !1 : (o.value = e, !0);
+}
+function T(t) {
+  var n;
+  const r = b(L), e = b(M);
+  [
+    V(t, U, r),
+    V(t, z, e)
+  ].some(Boolean) && ((n = t.setDirtyCanvas) == null || n.call(t, !0, !0));
+}
+function j(t) {
+  return t.type === y || t.comfyClass === y;
+}
+function v() {
+  var r;
+  const t = (r = globalThis.graph) == null ? void 0 : r._nodes;
+  if (Array.isArray(t))
+    for (const e of t)
+      j(e) && T(e);
+}
+function Y(t) {
   if (typeof t != "string")
     return !1;
   const r = t.trim();
@@ -85,36 +147,36 @@ function U(t) {
     return !1;
   }
 }
-function z(t) {
+function Z(t) {
   return t.videoWidth <= 0 || t.videoHeight <= 0 ? null : t.videoWidth / t.videoHeight;
 }
-function E(t, r = f) {
-  var p, n, c, u;
-  const e = (p = t.computeSize) == null ? void 0 : p.call(t);
+function _(t, r = f) {
+  var c, a, u, p;
+  const e = (c = t.computeSize) == null ? void 0 : c.call(t);
   if (!e)
     return;
-  const i = Math.max(((n = t.size) == null ? void 0 : n[0]) ?? e[0], y), o = Math.max(i - 16, y - 16), l = Math.max(Math.round(o / r), R), a = [
-    i,
-    Math.max(e[1], l + N)
+  const o = Math.max(((a = t.size) == null ? void 0 : a[0]) ?? e[0], I), n = Math.max(o - 16, I - 16), i = Math.max(Math.round(n / r), G), s = [
+    o,
+    Math.max(e[1], i + J)
   ];
-  if (!(((c = t.size) == null ? void 0 : c[0]) === a[0] && ((u = t.size) == null ? void 0 : u[1]) === a[1])) {
+  if (!(((u = t.size) == null ? void 0 : u[0]) === s[0] && ((p = t.size) == null ? void 0 : p[1]) === s[1])) {
     if (typeof t.setSize == "function") {
-      t.setSize(a);
+      t.setSize(s);
       return;
     }
-    t.size = a;
+    t.size = s;
   }
 }
-function w(t) {
+function R(t) {
   if (t.__loadVideoUrlPreviewState || typeof t.addDOMWidget != "function")
     return;
   const r = document.createElement("div");
   r.style.display = "none", r.style.width = "100%", r.style.padding = "8px 0 0", r.style.aspectRatio = `${f}`;
   const e = document.createElement("video");
   e.controls = !0, e.autoplay = !0, e.loop = !0, e.muted = !0, e.playsInline = !0, e.preload = "metadata", e.style.width = "100%", e.style.height = "100%", e.style.display = "block", e.style.objectFit = "contain", e.style.background = "#111", e.style.borderRadius = "8px", r.append(e);
-  let i = f;
-  const o = (s) => {
-    i = s && Number.isFinite(s) && s > 0 ? s : f, r.style.aspectRatio = `${i}`, E(t, i);
+  let o = f;
+  const n = (l) => {
+    o = l && Number.isFinite(l) && l > 0 ? l : f, r.style.aspectRatio = `${o}`, _(t, o);
   };
   t.addDOMWidget(P, "preview", r, {
     serialize: !1,
@@ -125,58 +187,97 @@ function w(t) {
     setValue() {
     }
   });
-  const l = new ResizeObserver(() => {
-    r.style.display !== "none" && E(t, i);
+  const i = new ResizeObserver(() => {
+    r.style.display !== "none" && _(t, o);
   });
-  l.observe(r), e.addEventListener("loadedmetadata", () => {
-    o(z(e));
+  i.observe(r), e.addEventListener("loadedmetadata", () => {
+    n(Z(e));
   }), e.addEventListener("emptied", () => {
-    o(null);
+    n(null);
   });
-  const a = () => {
-    const s = _(t), d = (typeof (s == null ? void 0 : s.value) == "string" ? s.value : "").trim();
-    if (!U(d)) {
-      r.style.display = "none", o(null), e.pause(), delete e.dataset.previewUrl, e.removeAttribute("src"), e.load();
+  const s = () => {
+    const l = w(t), d = (typeof (l == null ? void 0 : l.value) == "string" ? l.value : "").trim();
+    if (!Y(d)) {
+      r.style.display = "none", n(null), e.pause(), delete e.dataset.previewUrl, e.removeAttribute("src"), e.load();
       return;
     }
-    r.style.display = "block", e.dataset.previewUrl !== d && (o(null), e.dataset.previewUrl = d, e.src = d, e.load()), e.play().catch(() => {
-    }), E(t, i);
-  }, p = () => {
-    l.disconnect(), e.pause(), delete e.dataset.previewUrl, e.removeAttribute("src"), e.load();
-  }, n = _(t), c = n == null ? void 0 : n.callback;
-  n && (n.callback = function(...s) {
-    const h = c == null ? void 0 : c.apply(this, s);
-    return a(), h;
+    r.style.display = "block", e.dataset.previewUrl !== d && (n(null), e.dataset.previewUrl = d, e.src = d, e.load()), e.play().catch(() => {
+    }), _(t, o);
+  }, c = () => {
+    i.disconnect(), e.pause(), delete e.dataset.previewUrl, e.removeAttribute("src"), e.load();
+  }, a = w(t), u = a == null ? void 0 : a.callback;
+  a && (a.callback = function(...l) {
+    const g = u == null ? void 0 : u.apply(this, l);
+    return s(), g;
   });
-  const u = t.onRemoved;
-  t.onRemoved = function(...s) {
-    return p(), u == null ? void 0 : u.apply(this, s);
+  const p = t.onRemoved;
+  t.onRemoved = function(...l) {
+    return c(), p == null ? void 0 : p.apply(this, l);
   }, t.__loadVideoUrlPreviewState = {
-    sync: a,
-    cleanup: p
-  }, a();
+    sync: s,
+    cleanup: c
+  }, s();
 }
-m.registerExtension({
-  name: b,
+E.registerExtension({
+  name: O,
+  settings: [
+    {
+      id: L,
+      name: "Job Event Emitter Events URL",
+      type: "url",
+      defaultValue: "",
+      category: h,
+      tooltip: "Syncs into Job Event Emitter nodes. Leave blank to use IMAGEGEN_EVENTS_URL.",
+      onChange() {
+        v();
+      }
+    },
+    {
+      id: M,
+      name: "Job Event Emitter Event Token",
+      type: "text",
+      defaultValue: "",
+      category: h,
+      tooltip: "Syncs into Job Event Emitter nodes. Leave blank to use IMAGEGEN_EVENT_TOKEN.",
+      onChange() {
+        v();
+      }
+    }
+  ],
+  async setup() {
+    v();
+  },
   beforeRegisterNodeDef(t, r) {
-    if (r.name !== x)
-      return;
-    const e = t.prototype.onNodeCreated;
-    t.prototype.onNodeCreated = function(...o) {
-      const l = e == null ? void 0 : e.apply(this, o);
-      return w(this), l;
-    };
-    const i = t.prototype.onConfigure;
-    t.prototype.onConfigure = function(...o) {
-      var a;
-      const l = i == null ? void 0 : i.apply(this, o);
-      return w(this), (a = this.__loadVideoUrlPreviewState) == null || a.sync(), l;
-    };
+    if (r.name === A) {
+      const e = t.prototype.onNodeCreated;
+      t.prototype.onNodeCreated = function(...n) {
+        const i = e == null ? void 0 : e.apply(this, n);
+        return R(this), i;
+      };
+      const o = t.prototype.onConfigure;
+      t.prototype.onConfigure = function(...n) {
+        var s;
+        const i = o == null ? void 0 : o.apply(this, n);
+        return R(this), (s = this.__loadVideoUrlPreviewState) == null || s.sync(), i;
+      };
+    }
+    if (r.name === y) {
+      const e = t.prototype.onNodeCreated;
+      t.prototype.onNodeCreated = function(...n) {
+        const i = e == null ? void 0 : e.apply(this, n);
+        return T(this), i;
+      };
+      const o = t.prototype.onConfigure;
+      t.prototype.onConfigure = function(...n) {
+        const i = o == null ? void 0 : o.apply(this, n);
+        return T(this), i;
+      };
+    }
   }
 });
-m.registerExtension({
-  name: M,
+E.registerExtension({
+  name: D,
   async setup() {
-    g || (I.addEventListener(A, S), g = !0);
+    N || (S.addEventListener(W, K), N = !0);
   }
 });
