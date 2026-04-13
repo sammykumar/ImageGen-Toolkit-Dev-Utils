@@ -142,9 +142,9 @@ class JobEventEmitterNode:
                 ),
             },
             "hidden": {
-                # ComfyUI injects the current execution prompt_id here.
+                # ComfyUI injects the node's unique graph id here.
+                # Note: this is the graph node id, not the execution prompt_id.
                 "unique_id": "UNIQUE_ID",
-                "prompt_id": "PROMPT_ID",
             },
         }
 
@@ -153,21 +153,21 @@ class JobEventEmitterNode:
         video: Any,
         job_id: str = "",
         unique_id: str | None = None,
-        prompt_id: str | None = None,
     ) -> tuple[Any]:
         output_filename = _extract_output_filename(video)
 
+        effective_job_id = job_id.strip() if job_id else ""
+
         payload: dict[str, Any] = {
             "event_type": "job_completed",
-            "job_id": job_id.strip() if job_id else (prompt_id or unique_id or ""),
+            "job_id": effective_job_id,
             "timestamp": datetime.datetime.now(datetime.timezone.utc).isoformat(),
         }
 
-        # Always include prompt_id as comfyui_run_id so the app can resolve the
-        # job even when job_id was not injected into the workflow.
-        run_id = prompt_id or unique_id
-        if run_id:
-            payload["comfyui_run_id"] = run_id
+        # unique_id is the graph node id, not the execution prompt_id, so we
+        # omit comfyui_run_id here.  The app resolves the job via job_id when
+        # provided, or via the history fallback (resolveOutputFromHistory) on
+        # the server side when job_id is absent.
 
         if output_filename:
             payload["output_url"] = output_filename
