@@ -1,6 +1,6 @@
 import { api as S } from "../../../scripts/api.js";
 import { app as E } from "../../../scripts/app.js";
-var x = { commitHash: "0ffbd7e4121e", packageVersion: "0.0.5" };
+var x = { commitHash: "d7f2f1a194fb", packageVersion: "0.0.5" };
 const A = "load-video-url", P = "video_url_preview", y = "JobEventEmitter", U = "events_url", z = "event_token", h = ["ImageGen Toolkit", "Job Event Emitter"], L = "ImageGenToolkit.JobEventEmitter.eventsUrl", M = "ImageGenToolkit.JobEventEmitter.eventToken", I = 320, f = 16 / 9, G = 120, J = 120, O = "imagegen-toolkit-dev-utils.load-video-url-preview", W = "imagegen-toolkit.live-export.request", C = "/image-gen-toolkit/live-export/result", D = "imagegen-toolkit-dev-utils.live-export-bridge";
 let N = !1;
 console.info(`[${O}] build`, x);
@@ -224,7 +224,7 @@ E.registerExtension({
     {
       id: L,
       name: "Job Event Emitter Events URL",
-      type: "url",
+      type: "text",
       defaultValue: "",
       category: h,
       tooltip: "Syncs into Job Event Emitter nodes. Leave blank to use IMAGEGEN_EVENTS_URL.",

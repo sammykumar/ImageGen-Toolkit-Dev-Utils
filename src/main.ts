@@ -543,7 +543,7 @@ app.registerExtension({
 		{
 			id: JOB_EVENT_EMITTER_EVENTS_URL_SETTING_ID,
 			name: 'Job Event Emitter Events URL',
-			type: 'url',
+			type: 'text',
 			defaultValue: '',
 			category: JOB_EVENT_EMITTER_SETTINGS_CATEGORY,
 			tooltip: 'Syncs into Job Event Emitter nodes. Leave blank to use IMAGEGEN_EVENTS_URL.',
