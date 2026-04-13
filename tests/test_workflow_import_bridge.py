@@ -867,6 +867,128 @@ class WorkflowJsonConversionTests(unittest.TestCase):
         # DstNode's image must resolve through the unknown node to the real source
         self.assertEqual(result["12"]["inputs"]["image"], ["10", 0])
 
+    def test_chain_resolution_uses_links_array_when_node_inputs_have_null_link(self):
+        """When a custom reroute node's LiteGraph inputs[] carries link=null
+        (or inputs is empty), chain resolution must still succeed by using the
+        workflow links array (input_link_map) rather than nodes.inputs[].link."""
+
+        class SrcNode:
+            @classmethod
+            def INPUT_TYPES(cls):
+                return {"required": {}, "optional": {}}
+
+        class DstNode:
+            @classmethod
+            def INPUT_TYPES(cls):
+                return {"required": {"image": ("IMAGE", {})}, "optional": {}}
+
+        workflow = {
+            "nodes": [
+                {"id": 10, "type": "SrcNode", "mode": 0, "inputs": [], "widgets_values": []},
+                # Custom reroute: inputs[] exists but link is null — simulates
+                # the real-world failure seen with nodes 5160/5168/5178/5179.
+                {
+                    "id": 11,
+                    "type": "SomeCustomRerouteVariant",
+                    "mode": 0,
+                    "inputs": [{"name": "value", "type": "*", "link": None}],
+                    "widgets_values": [],
+                },
+                {
+                    "id": 12,
+                    "type": "DstNode",
+                    "mode": 0,
+                    "inputs": [{"name": "image", "type": "IMAGE", "link": 200}],
+                    "widgets_values": [],
+                },
+            ],
+            "links": [
+                # link 100: 10→11 (src→reroute), link 200: 11→12 (reroute→dst)
+                [100, 10, 0, 11, 0, "*"],
+                [200, 11, 0, 12, 0, "IMAGE"],
+            ],
+        }
+
+        result = self._convert(workflow, {"SrcNode": SrcNode, "DstNode": DstNode})
+
+        self.assertNotIn("11", result)
+        # Must resolve through node 11 (whose inputs[].link is null) using links array
+        self.assertEqual(result["12"]["inputs"]["image"], ["10", 0])
+
+    def test_chain_resolution_uses_links_array_when_node_has_empty_inputs(self):
+        """Same as above but the custom reroute has inputs=[] entirely."""
+
+        class SrcNode:
+            @classmethod
+            def INPUT_TYPES(cls):
+                return {"required": {}, "optional": {}}
+
+        class DstNode:
+            @classmethod
+            def INPUT_TYPES(cls):
+                return {"required": {"data": ("IMAGE", {})}, "optional": {}}
+
+        workflow = {
+            "nodes": [
+                {"id": 20, "type": "SrcNode", "mode": 0, "inputs": [], "widgets_values": []},
+                # Custom reroute: no inputs array at all
+                {"id": 21, "type": "CustomFwdNode", "mode": 0, "widgets_values": []},
+                {
+                    "id": 22,
+                    "type": "DstNode",
+                    "mode": 0,
+                    "inputs": [{"name": "data", "type": "IMAGE", "link": 300}],
+                    "widgets_values": [],
+                },
+            ],
+            "links": [
+                [50, 20, 0, 21, 0, "*"],
+                [300, 21, 0, 22, 0, "IMAGE"],
+            ],
+        }
+
+        result = self._convert(workflow, {"SrcNode": SrcNode, "DstNode": DstNode})
+
+        self.assertNotIn("21", result)
+        self.assertEqual(result["22"]["inputs"]["data"], ["20", 0])
+
+    def test_widget_default_used_when_widgets_values_exhausted(self):
+        """When widgets_values is empty (e.g., all widgets converted to linked
+        inputs in LiteGraph), fall back to the INPUT_TYPES config default."""
+
+        class NodeWithDefaults:
+            @classmethod
+            def INPUT_TYPES(cls):
+                return {
+                    "required": {
+                        "count": ("INT", {"default": 42}),
+                        "label": ("STRING", {"default": "hello"}),
+                        "rate": ("FLOAT", {"default": 3.14}),
+                        "flag": ("BOOLEAN", {"default": True}),
+                    },
+                    "optional": {},
+                }
+
+        workflow = {
+            "nodes": [
+                {
+                    "id": 1,
+                    "type": "NodeWithDefaults",
+                    "mode": 0,
+                    "inputs": [],
+                    "widgets_values": [],   # empty — simulate all-linked LiteGraph node
+                }
+            ],
+            "links": [],
+        }
+
+        result = self._convert(workflow, {"NodeWithDefaults": NodeWithDefaults})
+
+        self.assertEqual(result["1"]["inputs"]["count"], 42)
+        self.assertEqual(result["1"]["inputs"]["label"], "hello")
+        self.assertAlmostEqual(result["1"]["inputs"]["rate"], 3.14)
+        self.assertEqual(result["1"]["inputs"]["flag"], True)
+
     def test_unknown_node_type_skipped(self):
         workflow = {
             "nodes": [
