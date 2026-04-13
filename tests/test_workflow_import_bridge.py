@@ -877,6 +877,304 @@ class WorkflowJsonConversionTests(unittest.TestCase):
         result = self._convert(workflow, {"NodeType": MockNode})
         self.assertEqual(result["7"]["_meta"]["title"], "NodeType")
 
+    def test_vhs_formats_extra_widget_slots_consumed_and_named(self):
+        """COMBO with 'formats' config (VHS pattern): format-specific extra widgets
+        must be consumed from widgets_values and added to node_inputs with their names.
+        Widgets declared after 'format' in INPUT_TYPES (pingpong, save_output) must
+        read from the correct positions, not from the format-specific slots."""
+
+        class VHSCombineNode:
+            @classmethod
+            def INPUT_TYPES(cls):
+                return {
+                    "required": {
+                        "images": ("IMAGE",),
+                        "frame_rate": ("FLOAT", {"default": 8}),
+                        "loop_count": ("INT", {"default": 0}),
+                        "filename_prefix": ("STRING", {"default": "AnimateDiff"}),
+                        "format": (
+                            ["image/gif", "video/h264-mp4"],
+                            {
+                                "formats": {
+                                    "video/h264-mp4": [
+                                        ["pix_fmt", ["yuv420p", "yuv420p10le"]],
+                                        ["crf", "INT", {"default": 19}],
+                                        ["save_metadata", "BOOLEAN", {"default": True}],
+                                        ["trim_to_audio", "BOOLEAN", {"default": False}],
+                                    ]
+                                }
+                            },
+                        ),
+                        "pingpong": ("BOOLEAN", {"default": False}),
+                        "save_output": ("BOOLEAN", {"default": True}),
+                    },
+                    "optional": {
+                        "audio": ("AUDIO",),
+                    },
+                }
+
+        # widgets_values mirrors LiteGraph order: frame_rate, loop_count,
+        # filename_prefix, format, <4 format extras>, pingpong, save_output
+        workflow = {
+            "nodes": [
+                {
+                    "id": 5175,
+                    "type": "VHS_VideoCombine",
+                    "mode": 0,
+                    "inputs": [
+                        {"name": "images", "link": 1},
+                        {"name": "audio", "link": 2},
+                    ],
+                    "widgets_values": [
+                        24,
+                        0,
+                        "video/big",
+                        "video/h264-mp4",
+                        "yuv420p",
+                        16,
+                        True,
+                        False,
+                        False,
+                        True,
+                    ],
+                }
+            ],
+            "links": [
+                [1, 100, 0, 5175, 0],
+                [2, 200, 0, 5175, 1],
+            ],
+        }
+
+        result = self._convert(workflow, {"VHS_VideoCombine": VHSCombineNode})
+        node = result["5175"]["inputs"]
+
+        # Core widget values
+        self.assertEqual(node["frame_rate"], 24)
+        self.assertEqual(node["loop_count"], 0)
+        self.assertEqual(node["filename_prefix"], "video/big")
+        self.assertEqual(node["format"], "video/h264-mp4")
+        # Format-specific extra widgets present and correctly named
+        self.assertEqual(node["pix_fmt"], "yuv420p")
+        self.assertEqual(node["crf"], 16)
+        self.assertEqual(node["save_metadata"], True)
+        self.assertEqual(node["trim_to_audio"], False)
+        # Widgets after format-extras read from correct positions
+        self.assertEqual(node["pingpong"], False)
+        self.assertEqual(node["save_output"], True)
+        # Link inputs resolved
+        self.assertEqual(node["images"], ["100", 0])
+        self.assertEqual(node["audio"], ["200", 0])
+
+    def test_vhs_formats_unknown_format_no_extra_slots(self):
+        """COMBO with 'formats' config: an unknown/unregistered format value produces
+        no extra widget slots and does not shift subsequent widget reads."""
+
+        class VHSCombineNode:
+            @classmethod
+            def INPUT_TYPES(cls):
+                return {
+                    "required": {
+                        "format": (
+                            ["image/gif", "video/h264-mp4"],
+                            {"formats": {"video/h264-mp4": [["crf", "INT"]]}},
+                        ),
+                        "pingpong": ("BOOLEAN", {"default": False}),
+                    }
+                }
+
+        workflow = {
+            "nodes": [
+                {
+                    "id": 1,
+                    "type": "VHSNode",
+                    "mode": 0,
+                    "inputs": [],
+                    # format=image/gif (no extras), then pingpong=True
+                    "widgets_values": ["image/gif", True],
+                }
+            ],
+            "links": [],
+        }
+
+        result = self._convert(workflow, {"VHSNode": VHSCombineNode})
+        node = result["1"]["inputs"]
+        self.assertEqual(node["format"], "image/gif")
+        self.assertEqual(node["pingpong"], True)
+
+    def test_dynamic_combo_v3_sub_inputs_consumed_and_named(self):
+        """COMFY_DYNAMICCOMBO_V3 inputs expand sub-inputs based on the selected
+        option. The sub-inputs must be consumed from widgets_values and stored with
+        dot-prefixed names (e.g. resize_type.width)."""
+
+        class ResizeNode:
+            @classmethod
+            def INPUT_TYPES(cls):
+                return {
+                    "required": {
+                        "input": ("IMAGE",),
+                        "resize_type": (
+                            "COMFY_DYNAMICCOMBO_V3",
+                            {
+                                "options": [
+                                    {
+                                        "key": "scale dimensions",
+                                        "inputs": {
+                                            "required": {
+                                                "width": ("INT", {"default": 512}),
+                                                "height": ("INT", {"default": 512}),
+                                                "crop": (
+                                                    "COMBO",
+                                                    {
+                                                        "options": [
+                                                            "disabled",
+                                                            "center",
+                                                        ]
+                                                    },
+                                                ),
+                                            }
+                                        },
+                                    },
+                                    {
+                                        "key": "scale by multiplier",
+                                        "inputs": {
+                                            "required": {
+                                                "multiplier": (
+                                                    "FLOAT",
+                                                    {"default": 1.0},
+                                                )
+                                            }
+                                        },
+                                    },
+                                ]
+                            },
+                        ),
+                        "scale_method": (
+                            "COMBO",
+                            {"options": ["nearest-exact", "bilinear", "lanczos"]},
+                        ),
+                    }
+                }
+
+        # widgets_values: resize_type="scale dimensions", width=720, height=1280,
+        # crop="center", scale_method="lanczos"
+        workflow = {
+            "nodes": [
+                {
+                    "id": 5153,
+                    "type": "ResizeImageMaskNode",
+                    "mode": 0,
+                    "inputs": [{"name": "input", "link": 10}],
+                    "widgets_values": [
+                        "scale dimensions",
+                        720,
+                        1280,
+                        "center",
+                        "lanczos",
+                    ],
+                }
+            ],
+            "links": [[10, 50, 0, 5153, 0]],
+        }
+
+        result = self._convert(workflow, {"ResizeImageMaskNode": ResizeNode})
+        node = result["5153"]["inputs"]
+
+        # Parent DYNAMICCOMBO value
+        self.assertEqual(node["resize_type"], "scale dimensions")
+        # Sub-inputs with dot-prefixed names
+        self.assertEqual(node["resize_type.width"], 720)
+        self.assertEqual(node["resize_type.height"], 1280)
+        self.assertEqual(node["resize_type.crop"], "center")
+        # Widget AFTER the dynamic combo reads from correct position
+        self.assertEqual(node["scale_method"], "lanczos")
+        # Link input
+        self.assertEqual(node["input"], ["50", 0])
+
+    def test_dynamic_combo_v3_different_option_consumes_correct_slots(self):
+        """Selecting a different DYNAMICCOMBO option expands different sub-inputs."""
+
+        class ResizeNode:
+            @classmethod
+            def INPUT_TYPES(cls):
+                return {
+                    "required": {
+                        "resize_type": (
+                            "COMFY_DYNAMICCOMBO_V3",
+                            {
+                                "options": [
+                                    {
+                                        "key": "scale by multiplier",
+                                        "inputs": {
+                                            "required": {
+                                                "multiplier": (
+                                                    "FLOAT",
+                                                    {"default": 1.0},
+                                                )
+                                            }
+                                        },
+                                    }
+                                ]
+                            },
+                        ),
+                        "scale_method": ("COMBO", {"options": ["lanczos"]}),
+                    }
+                }
+
+        workflow = {
+            "nodes": [
+                {
+                    "id": 1,
+                    "type": "ResizeNode",
+                    "mode": 0,
+                    "inputs": [],
+                    # resize_type="scale by multiplier", multiplier=2.0, scale_method="lanczos"
+                    "widgets_values": ["scale by multiplier", 2.0, "lanczos"],
+                }
+            ],
+            "links": [],
+        }
+
+        result = self._convert(workflow, {"ResizeNode": ResizeNode})
+        node = result["1"]["inputs"]
+        self.assertEqual(node["resize_type"], "scale by multiplier")
+        self.assertEqual(node["resize_type.multiplier"], 2.0)
+        self.assertEqual(node["scale_method"], "lanczos")
+
+    def test_dynamic_combo_v3_unknown_option_skips_sub_inputs(self):
+        """An unrecognised DYNAMICCOMBO value gracefully skips sub-input expansion."""
+
+        class ResizeNode:
+            @classmethod
+            def INPUT_TYPES(cls):
+                return {
+                    "required": {
+                        "resize_type": (
+                            "COMFY_DYNAMICCOMBO_V3",
+                            {"options": [{"key": "scale dimensions", "inputs": {}}]},
+                        ),
+                        "scale_method": ("COMBO", {"options": ["lanczos"]}),
+                    }
+                }
+
+        workflow = {
+            "nodes": [
+                {
+                    "id": 1,
+                    "type": "ResizeNode",
+                    "mode": 0,
+                    "inputs": [],
+                    # "unknown option" is not in options — no sub-inputs consumed
+                    "widgets_values": ["unknown option", "lanczos"],
+                }
+            ],
+            "links": [],
+        }
+
+        result = self._convert(workflow, {"ResizeNode": ResizeNode})
+        node = result["1"]["inputs"]
+        self.assertEqual(node["resize_type"], "unknown option")
+        self.assertEqual(node["scale_method"], "lanczos")
+
     def test_get_importable_workflow_content_converts_workflow_json_file(self):
         module = importlib.import_module("workflow_import_bridge")
 

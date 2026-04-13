@@ -16,6 +16,7 @@ _LGRAPH_MODE_BYPASS: int = 4
 _LGRAPH_MODE_NEVER: int = 2
 _FRONTEND_ONLY_NODE_TYPES: frozenset[str] = frozenset({"Note", "Reroute"})
 _WIDGET_PRIMITIVE_TYPES: frozenset[str] = frozenset({"INT", "FLOAT", "STRING", "BOOLEAN"})
+_DYNAMIC_COMBO_V3_TYPE: str = "COMFY_DYNAMICCOMBO_V3"
 
 
 class WorkflowImportConversionError(ValueError):
@@ -373,6 +374,8 @@ def _is_widget_input(type_def: Any) -> bool:
         return False
     if type_def == "COMBO":
         return True
+    if type_def == _DYNAMIC_COMBO_V3_TYPE:
+        return True
     try:
         return type_def in _WIDGET_PRIMITIVE_TYPES
     except TypeError:
@@ -522,6 +525,63 @@ def _convert_workflow_json_to_api_prompt(
                             node_inputs[input_name] = widget_value
                     elif widget_value is not None:
                         node_inputs[input_name] = widget_value
+
+                    # VHS pattern: COMBO with 'formats' config injects extra named
+                    # widget slots after the selected format value.
+                    if isinstance(type_def, (list, tuple)) and "formats" in config:
+                        fmt_widgets = config["formats"].get(widget_value, [])
+                        for fw in fmt_widgets:
+                            if not isinstance(fw, (list, tuple)) or len(fw) < 2:
+                                widget_idx += 1
+                                continue
+                            fw_name = fw[0]
+                            fw_value = (
+                                widgets_values[widget_idx]
+                                if widget_idx < len(widgets_values)
+                                else None
+                            )
+                            widget_idx += 1
+                            if fw_value is not None:
+                                node_inputs[fw_name] = fw_value
+
+                    # COMFY_DYNAMICCOMBO_V3: the selected option expands sub-inputs
+                    # whose values appear immediately after the parent value in
+                    # widgets_values.
+                    elif type_def == _DYNAMIC_COMBO_V3_TYPE and widget_value is not None:
+                        options = config.get("options", [])
+                        selected_option = next(
+                            (o for o in options if o.get("key") == widget_value),
+                            None,
+                        )
+                        if selected_option is not None:
+                            sub_required = (
+                                selected_option.get("inputs", {}).get("required", {})
+                            )
+                            for sub_name, sub_type_info in sub_required.items():
+                                sub_key = f"{input_name}.{sub_name}"
+                                if (
+                                    not isinstance(sub_type_info, (list, tuple))
+                                    or len(sub_type_info) < 1
+                                ):
+                                    continue
+                                sub_value = (
+                                    widgets_values[widget_idx]
+                                    if widget_idx < len(widgets_values)
+                                    else None
+                                )
+                                widget_idx += 1
+                                if sub_key in connected_links:
+                                    lnk_id = connected_links[sub_key]
+                                    if lnk_id in link_map:
+                                        src_node_id, src_slot = link_map[lnk_id]
+                                        node_inputs[sub_key] = [
+                                            str(src_node_id),
+                                            src_slot,
+                                        ]
+                                    elif sub_value is not None:
+                                        node_inputs[sub_key] = sub_value
+                                elif sub_value is not None:
+                                    node_inputs[sub_key] = sub_value
                 else:
                     # Link-type input
                     if input_name in connected_links:
