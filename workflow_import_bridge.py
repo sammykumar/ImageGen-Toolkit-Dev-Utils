@@ -360,11 +360,19 @@ def get_importable_workflow_content(
 
 
 def _is_widget_input(type_def: Any) -> bool:
-    """True for list/tuple combo choices and primitive scalar types."""
+    """True for list/tuple combo choices and primitive scalar types.
+
+    ComfyUI's INPUT_TYPES() uses two formats for COMBO inputs:
+    - Old style: (["option1", "option2", ...], config) — type_def is a list
+    - New style: ("COMBO", {"options": [...]}) — type_def is the string "COMBO"
+    Both must be treated as widget inputs.
+    """
     if isinstance(type_def, (list, tuple)):
         return True
     if not isinstance(type_def, str):
         return False
+    if type_def == "COMBO":
+        return True
     try:
         return type_def in _WIDGET_PRIMITIVE_TYPES
     except TypeError:
