@@ -363,7 +363,14 @@ def _is_widget_input(type_def: Any) -> bool:
     """True for list/tuple combo choices and primitive scalar types."""
     if isinstance(type_def, (list, tuple)):
         return True
-    return isinstance(type_def, str) and type_def in _WIDGET_PRIMITIVE_TYPES
+    if not isinstance(type_def, str):
+        return False
+    try:
+        return type_def in _WIDGET_PRIMITIVE_TYPES
+    except TypeError:
+        # AlwaysEqualProxy and similar unhashable str subclasses used for
+        # wildcard/any-type link inputs — not widget inputs.
+        return False
 
 
 def _has_control_after_generate(config: dict[str, Any]) -> bool:
