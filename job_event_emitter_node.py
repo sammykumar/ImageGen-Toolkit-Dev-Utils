@@ -82,8 +82,62 @@ def _extract_filename_value(value: Any) -> str | None:
     return None
 
 
+def _extract_output_metadata(value: Any) -> tuple[str | None, dict[str, str] | None]:
+    if isinstance(value, str):
+        return (_resolve_setting_value(value), None)
+
+    if isinstance(value, dict):
+        filename = _resolve_setting_value(value.get("filename"))
+        subfolder = _resolve_setting_value(value.get("subfolder"))
+        output_type = _resolve_setting_value(value.get("type"))
+
+        if filename and subfolder and output_type:
+            return (
+                filename,
+                {
+                    "filename": filename,
+                    "subfolder": subfolder,
+                    "type": output_type,
+                },
+            )
+
+        if filename:
+            return (filename, None)
+
+        for key in ("name", "path", "filepath"):
+            candidate = _resolve_setting_value(value.get(key))
+            if candidate:
+                return (candidate, None)
+
+        for key in ("videos", "gifs", "filenames", "images"):
+            candidate_filename, candidate_output = _extract_output_metadata(value.get(key))
+            if candidate_filename:
+                return (candidate_filename, candidate_output)
+
+        return (None, None)
+
+    if isinstance(value, (list, tuple)):
+        for item in value:
+            candidate_filename, candidate_output = _extract_output_metadata(item)
+            if candidate_filename:
+                return (candidate_filename, candidate_output)
+
+    return (None, None)
+
+
 def _extract_output_filename(video: Any) -> str | None:
-    return _extract_filename_value(video)
+    filename, _ = _extract_output_metadata(video)
+    return filename
+
+
+def _payload_completeness(output_filename: str | None, output_metadata: dict[str, str] | None) -> str:
+    if output_metadata is not None:
+        return "structured"
+
+    if output_filename:
+        return "filename_only"
+
+    return "none"
 
 
 def _payload_summary(payload: dict[str, Any]) -> dict[str, str]:
@@ -227,7 +281,7 @@ class JobEventFinishedNode:
     ) -> tuple[Any]:
         comfyui_run_id = _extract_prompt_id(prompt)
         effective_job_id = _resolve_setting_value(job_id)
-        output_filename = _extract_output_filename(video)
+        output_filename, output_metadata = _extract_output_metadata(video)
 
         payload: dict[str, Any] = {
             "event_type": "job_completed",
@@ -242,6 +296,15 @@ class JobEventFinishedNode:
 
         if output_filename:
             payload["output_url"] = output_filename
+
+        if output_metadata is not None:
+            payload["output"] = output_metadata
+
+        logger.info(
+            "[job_event_emitter] Prepared completion payload completeness=%s payload=%s",
+            _payload_completeness(output_filename, output_metadata),
+            _payload_summary(payload),
+        )
 
         _post_event(payload, events_url=events_url, event_token=event_token)
         return (video,)
