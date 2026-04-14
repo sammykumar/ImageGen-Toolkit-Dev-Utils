@@ -12,16 +12,6 @@ type WidgetLike = {
 	callback?: (...args: unknown[]) => unknown
 }
 
-type SettingDefinitionLike = {
-	id: string
-	name: string
-	type: 'text' | 'url'
-	defaultValue: string
-	category?: string[]
-	tooltip?: string
-	onChange?: (newValue: unknown, oldValue?: unknown) => void
-}
-
 type DOMWidgetLike = {
 	onRemove?: () => void
 }
@@ -66,17 +56,8 @@ type NodeTypeLike = {
 
 type ExtensionLike = {
 	name: string
-	settings?: SettingDefinitionLike[]
 	setup?: () => void | Promise<void>
 	beforeRegisterNodeDef?: (nodeType: NodeTypeLike, nodeData: NodeDefinitionLike) => void
-}
-
-type AppWithSettings = typeof app & {
-	ui?: {
-		settings?: {
-			getSettingValue?: (id: string, defaultValue?: string) => unknown
-		}
-	}
 }
 
 type GraphToPromptResult = {
@@ -144,12 +125,6 @@ declare global {
 
 const TARGET_NODE_NAME = 'load-video-url'
 const PREVIEW_WIDGET_NAME = 'video_url_preview'
-const JOB_EVENT_EMITTER_NODE_NAME = 'JobEventEmitter'
-const JOB_EVENT_EMITTER_EVENTS_URL_WIDGET = 'events_url'
-const JOB_EVENT_EMITTER_EVENT_TOKEN_WIDGET = 'event_token'
-const JOB_EVENT_EMITTER_SETTINGS_CATEGORY = ['ImageGen Toolkit', 'Job Event Emitter']
-const JOB_EVENT_EMITTER_EVENTS_URL_SETTING_ID = 'ImageGenToolkit.JobEventEmitter.eventsUrl'
-const JOB_EVENT_EMITTER_EVENT_TOKEN_SETTING_ID = 'ImageGenToolkit.JobEventEmitter.eventToken'
 const MIN_NODE_WIDTH = 320
 const DEFAULT_PREVIEW_ASPECT_RATIO = 16 / 9
 const MIN_PREVIEW_HEIGHT = 120
@@ -299,64 +274,6 @@ function getVideoUrlWidget(node: NodeLike): WidgetLike | undefined {
 
 function getWidgetByName(node: NodeLike, widgetName: string): WidgetLike | undefined {
 	return node.widgets?.find((widget) => widget.name === widgetName)
-}
-
-function normalizeSettingValue(value: unknown): string {
-	if (typeof value !== 'string') {
-		return ''
-	}
-
-	return value.trim()
-}
-
-function getJobEventEmitterSettingValue(settingId: string): string {
-	const settingsDialog = (app as AppWithSettings).ui?.settings
-	return normalizeSettingValue(settingsDialog?.getSettingValue?.(settingId, ''))
-}
-
-function setWidgetValue(node: NodeLike, widgetName: string, nextValue: string): boolean {
-	const widget = getWidgetByName(node, widgetName)
-	if (!widget) {
-		return false
-	}
-
-	if (normalizeSettingValue(widget.value) === nextValue) {
-		return false
-	}
-
-	widget.value = nextValue
-	return true
-}
-
-function syncJobEventEmitterNodeSettings(node: NodeLike) {
-	const eventsUrl = getJobEventEmitterSettingValue(JOB_EVENT_EMITTER_EVENTS_URL_SETTING_ID)
-	const eventToken = getJobEventEmitterSettingValue(JOB_EVENT_EMITTER_EVENT_TOKEN_SETTING_ID)
-
-	const changed = [
-		setWidgetValue(node, JOB_EVENT_EMITTER_EVENTS_URL_WIDGET, eventsUrl),
-		setWidgetValue(node, JOB_EVENT_EMITTER_EVENT_TOKEN_WIDGET, eventToken)
-	].some(Boolean)
-
-	if (changed) {
-		node.setDirtyCanvas?.(true, true)
-	}
-}
-
-function isJobEventEmitterNode(node: NodeLike): boolean {
-	return node.type === JOB_EVENT_EMITTER_NODE_NAME || node.comfyClass === JOB_EVENT_EMITTER_NODE_NAME
-}
-
-function syncExistingJobEventEmitterNodes() {
-	const nodes = (globalThis.graph as GraphLike | undefined)?._nodes
-	if (!Array.isArray(nodes)) {
-		return
-	}
-
-	for (const node of nodes) {
-		if (isJobEventEmitterNode(node)) {
-			syncJobEventEmitterNodeSettings(node)
-		}
-	}
 }
 
 function isPreviewableMp4Url(value: unknown): value is string {
@@ -539,33 +456,6 @@ function attachPreview(node: NodeLike) {
 
 app.registerExtension({
 	name: EXTENSION_NAME,
-	settings: [
-		{
-			id: JOB_EVENT_EMITTER_EVENTS_URL_SETTING_ID,
-			name: 'Job Event Emitter Events URL',
-			type: 'text',
-			defaultValue: '',
-			category: JOB_EVENT_EMITTER_SETTINGS_CATEGORY,
-			tooltip: 'Syncs into Job Event Emitter nodes. Leave blank to use IMAGEGEN_EVENTS_URL.',
-			onChange() {
-				syncExistingJobEventEmitterNodes()
-			}
-		},
-		{
-			id: JOB_EVENT_EMITTER_EVENT_TOKEN_SETTING_ID,
-			name: 'Job Event Emitter Event Token',
-			type: 'text',
-			defaultValue: '',
-			category: JOB_EVENT_EMITTER_SETTINGS_CATEGORY,
-			tooltip: 'Syncs into Job Event Emitter nodes. Leave blank to use IMAGEGEN_EVENT_TOKEN.',
-			onChange() {
-				syncExistingJobEventEmitterNodes()
-			}
-		}
-	],
-	async setup() {
-		syncExistingJobEventEmitterNodes()
-	},
 	beforeRegisterNodeDef(nodeType: NodeTypeLike, nodeData: NodeDefinitionLike) {
 		if (nodeData.name === TARGET_NODE_NAME) {
 			const originalOnNodeCreated = nodeType.prototype.onNodeCreated
@@ -580,22 +470,6 @@ app.registerExtension({
 				const result = originalOnConfigure?.apply(this, args)
 				attachPreview(this)
 				this.__loadVideoUrlPreviewState?.sync()
-				return result
-			}
-		}
-
-		if (nodeData.name === JOB_EVENT_EMITTER_NODE_NAME) {
-			const originalOnNodeCreated = nodeType.prototype.onNodeCreated
-			nodeType.prototype.onNodeCreated = function (...args: unknown[]) {
-				const result = originalOnNodeCreated?.apply(this, args)
-				syncJobEventEmitterNodeSettings(this)
-				return result
-			}
-
-			const originalOnConfigure = nodeType.prototype.onConfigure
-			nodeType.prototype.onConfigure = function (...args: unknown[]) {
-				const result = originalOnConfigure?.apply(this, args)
-				syncJobEventEmitterNodeSettings(this)
 				return result
 			}
 		}

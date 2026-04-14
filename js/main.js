@@ -1,184 +1,150 @@
-import { api as S } from "../../../scripts/api.js";
-import { app as E } from "../../../scripts/app.js";
-var x = { commitHash: "90af542006af", packageVersion: "0.0.5" };
-const A = "load-video-url", P = "video_url_preview", y = "JobEventEmitter", U = "events_url", z = "event_token", h = ["ImageGen Toolkit", "Job Event Emitter"], L = "ImageGenToolkit.JobEventEmitter.eventsUrl", M = "ImageGenToolkit.JobEventEmitter.eventToken", I = 320, f = 16 / 9, G = 120, J = 120, O = "imagegen-toolkit-dev-utils.load-video-url-preview", W = "imagegen-toolkit.live-export.request", C = "/image-gen-toolkit/live-export/result", D = "imagegen-toolkit-dev-utils.live-export-bridge";
-let N = !1;
-console.info(`[${O}] build`, x);
-function H() {
-  var e, o, n, i;
-  const t = E, r = B(document.title);
+import { api as I } from "../../../scripts/api.js";
+import { app as m } from "../../../scripts/app.js";
+var b = { commitHash: "b055ac9d411f", packageVersion: "0.0.5" };
+const x = "load-video-url", P = "video_url_preview", h = 320, f = 16 / 9, R = 120, L = 120, T = "imagegen-toolkit-dev-utils.load-video-url-preview", N = "imagegen-toolkit.live-export.request", V = "/image-gen-toolkit/live-export/result", z = "imagegen-toolkit-dev-utils.live-export-bridge";
+let g = !1;
+console.info(`[${T}] build`, b);
+function A() {
+  var t, i, o, n;
+  const e = m, r = M(document.title);
   return {
-    clientId: (e = t.api) == null ? void 0 : e.clientId,
-    graphId: (o = globalThis.graph) == null ? void 0 : o.id,
-    frontendVersion: (i = (n = globalThis.graph) == null ? void 0 : n.extra) == null ? void 0 : i.frontendVersion,
-    workflowTitle: X(r),
+    clientId: (t = e.api) == null ? void 0 : t.clientId,
+    graphId: (i = globalThis.graph) == null ? void 0 : i.id,
+    frontendVersion: (n = (o = globalThis.graph) == null ? void 0 : o.extra) == null ? void 0 : n.frontendVersion,
+    workflowTitle: k(r),
     pageTitle: r
   };
 }
-function B(t) {
-  if (typeof t != "string")
+function M(e) {
+  if (typeof e != "string")
     return;
-  const r = t.replace(/\s+/g, " ").trim();
+  const r = e.replace(/\s+/g, " ").trim();
   return r || void 0;
 }
-function F(t) {
-  const r = t.replace(/^[*\u2022]\s*/, "").replace(/\s+/g, " ").trim();
+function O(e) {
+  const r = e.replace(/^[*\u2022]\s*/, "").replace(/\s+/g, " ").trim();
   if (!(!r || r.toLowerCase() === "comfyui"))
     return r;
 }
-function X(t) {
-  if (!t)
+function k(e) {
+  if (!e)
     return;
   const r = [
-    t.replace(/\s*[-|]\s*ComfyUI$/i, ""),
-    t.replace(/^ComfyUI\s*[-|]\s*/i, ""),
-    t
+    e.replace(/\s*[-|]\s*ComfyUI$/i, ""),
+    e.replace(/^ComfyUI\s*[-|]\s*/i, ""),
+    e
   ];
-  for (const e of r) {
-    const o = F(e);
-    if (o)
-      return o;
+  for (const t of r) {
+    const i = O(t);
+    if (i)
+      return i;
   }
 }
-function q(t) {
-  return t instanceof Error && t.message.trim() ? t.message : typeof t == "string" && t.trim() ? t : "Live export failed in the ComfyUI frontend runtime";
+function U(e) {
+  return e instanceof Error && e.message.trim() ? e.message : typeof e == "string" && e.trim() ? e : "Live export failed in the ComfyUI frontend runtime";
 }
-async function m(t) {
-  await S.fetchApi(C, {
+async function v(e) {
+  await I.fetchApi(V, {
     method: "POST",
     headers: {
       "Content-Type": "application/json"
     },
-    body: JSON.stringify(t)
+    body: JSON.stringify(e)
   });
 }
-async function K(t) {
-  var i, s;
-  const r = (s = (i = t.detail) == null ? void 0 : i.requestId) == null ? void 0 : s.trim();
+async function S(e) {
+  var n, a;
+  const r = (a = (n = e.detail) == null ? void 0 : n.requestId) == null ? void 0 : a.trim();
   if (!r)
     return;
-  const e = H(), o = (/* @__PURE__ */ new Date()).toISOString(), n = E;
+  const t = A(), i = (/* @__PURE__ */ new Date()).toISOString(), o = m;
   try {
-    const c = n.graphToPrompt;
+    const c = o.graphToPrompt;
     if (typeof c != "function")
       throw new Error("app.graphToPrompt is unavailable");
-    const { output: a } = await c.call(n);
-    if (!a || typeof a != "object" || Array.isArray(a)) {
-      await m({
+    const { output: s } = await c.call(o);
+    if (!s || typeof s != "object" || Array.isArray(s)) {
+      await v({
         requestId: r,
         ok: !1,
         error: {
           code: "invalid_export_shape",
           message: "app.graphToPrompt() returned an invalid apiPrompt payload"
         },
-        ...e,
-        exportedAt: o
+        ...t,
+        exportedAt: i
       });
       return;
     }
-    await m({
+    await v({
       requestId: r,
       ok: !0,
-      apiPrompt: a,
-      ...e,
-      exportedAt: o
+      apiPrompt: s,
+      ...t,
+      exportedAt: i
     });
   } catch (c) {
-    await m({
+    await v({
       requestId: r,
       ok: !1,
       error: {
         code: "graph_to_prompt_failed",
-        message: q(c)
+        message: U(c)
       },
-      ...e,
-      exportedAt: o
+      ...t,
+      exportedAt: i
     });
   }
 }
-function w(t) {
+function _(e) {
   var r;
-  return (r = t.widgets) == null ? void 0 : r.find((e) => e.name === "video_url");
+  return (r = e.widgets) == null ? void 0 : r.find((t) => t.name === "video_url");
 }
-function $(t, r) {
-  var e;
-  return (e = t.widgets) == null ? void 0 : e.find((o) => o.name === r);
-}
-function k(t) {
-  return typeof t != "string" ? "" : t.trim();
-}
-function b(t) {
-  var e, o;
-  const r = (e = E.ui) == null ? void 0 : e.settings;
-  return k((o = r == null ? void 0 : r.getSettingValue) == null ? void 0 : o.call(r, t, ""));
-}
-function V(t, r, e) {
-  const o = $(t, r);
-  return !o || k(o.value) === e ? !1 : (o.value = e, !0);
-}
-function T(t) {
-  var n;
-  const r = b(L), e = b(M);
-  [
-    V(t, U, r),
-    V(t, z, e)
-  ].some(Boolean) && ((n = t.setDirtyCanvas) == null || n.call(t, !0, !0));
-}
-function j(t) {
-  return t.type === y || t.comfyClass === y;
-}
-function v() {
-  var r;
-  const t = (r = globalThis.graph) == null ? void 0 : r._nodes;
-  if (Array.isArray(t))
-    for (const e of t)
-      j(e) && T(e);
-}
-function Y(t) {
-  if (typeof t != "string")
+function W(e) {
+  if (typeof e != "string")
     return !1;
-  const r = t.trim();
+  const r = e.trim();
   if (!r)
     return !1;
   try {
-    const e = new URL(r);
-    return (e.protocol === "http:" || e.protocol === "https:") && e.pathname.toLowerCase().endsWith(".mp4");
+    const t = new URL(r);
+    return (t.protocol === "http:" || t.protocol === "https:") && t.pathname.toLowerCase().endsWith(".mp4");
   } catch {
     return !1;
   }
 }
-function Z(t) {
-  return t.videoWidth <= 0 || t.videoHeight <= 0 ? null : t.videoWidth / t.videoHeight;
+function D(e) {
+  return e.videoWidth <= 0 || e.videoHeight <= 0 ? null : e.videoWidth / e.videoHeight;
 }
-function _(t, r = f) {
-  var c, a, u, p;
-  const e = (c = t.computeSize) == null ? void 0 : c.call(t);
-  if (!e)
+function y(e, r = f) {
+  var c, s, p, u;
+  const t = (c = e.computeSize) == null ? void 0 : c.call(e);
+  if (!t)
     return;
-  const o = Math.max(((a = t.size) == null ? void 0 : a[0]) ?? e[0], I), n = Math.max(o - 16, I - 16), i = Math.max(Math.round(n / r), G), s = [
-    o,
-    Math.max(e[1], i + J)
+  const i = Math.max(((s = e.size) == null ? void 0 : s[0]) ?? t[0], h), o = Math.max(i - 16, h - 16), n = Math.max(Math.round(o / r), R), a = [
+    i,
+    Math.max(t[1], n + L)
   ];
-  if (!(((u = t.size) == null ? void 0 : u[0]) === s[0] && ((p = t.size) == null ? void 0 : p[1]) === s[1])) {
-    if (typeof t.setSize == "function") {
-      t.setSize(s);
+  if (!(((p = e.size) == null ? void 0 : p[0]) === a[0] && ((u = e.size) == null ? void 0 : u[1]) === a[1])) {
+    if (typeof e.setSize == "function") {
+      e.setSize(a);
       return;
     }
-    t.size = s;
+    e.size = a;
   }
 }
-function R(t) {
-  if (t.__loadVideoUrlPreviewState || typeof t.addDOMWidget != "function")
+function w(e) {
+  if (e.__loadVideoUrlPreviewState || typeof e.addDOMWidget != "function")
     return;
   const r = document.createElement("div");
   r.style.display = "none", r.style.width = "100%", r.style.padding = "8px 0 0", r.style.aspectRatio = `${f}`;
-  const e = document.createElement("video");
-  e.controls = !0, e.autoplay = !0, e.loop = !0, e.muted = !0, e.playsInline = !0, e.preload = "metadata", e.style.width = "100%", e.style.height = "100%", e.style.display = "block", e.style.objectFit = "contain", e.style.background = "#111", e.style.borderRadius = "8px", r.append(e);
-  let o = f;
-  const n = (l) => {
-    o = l && Number.isFinite(l) && l > 0 ? l : f, r.style.aspectRatio = `${o}`, _(t, o);
+  const t = document.createElement("video");
+  t.controls = !0, t.autoplay = !0, t.loop = !0, t.muted = !0, t.playsInline = !0, t.preload = "metadata", t.style.width = "100%", t.style.height = "100%", t.style.display = "block", t.style.objectFit = "contain", t.style.background = "#111", t.style.borderRadius = "8px", r.append(t);
+  let i = f;
+  const o = (l) => {
+    i = l && Number.isFinite(l) && l > 0 ? l : f, r.style.aspectRatio = `${i}`, y(e, i);
   };
-  t.addDOMWidget(P, "preview", r, {
+  e.addDOMWidget(P, "preview", r, {
     serialize: !1,
     hideOnZoom: !1,
     getValue() {
@@ -187,97 +153,58 @@ function R(t) {
     setValue() {
     }
   });
-  const i = new ResizeObserver(() => {
-    r.style.display !== "none" && _(t, o);
+  const n = new ResizeObserver(() => {
+    r.style.display !== "none" && y(e, i);
   });
-  i.observe(r), e.addEventListener("loadedmetadata", () => {
-    n(Z(e));
-  }), e.addEventListener("emptied", () => {
-    n(null);
+  n.observe(r), t.addEventListener("loadedmetadata", () => {
+    o(D(t));
+  }), t.addEventListener("emptied", () => {
+    o(null);
   });
-  const s = () => {
-    const l = w(t), d = (typeof (l == null ? void 0 : l.value) == "string" ? l.value : "").trim();
-    if (!Y(d)) {
-      r.style.display = "none", n(null), e.pause(), delete e.dataset.previewUrl, e.removeAttribute("src"), e.load();
+  const a = () => {
+    const l = _(e), d = (typeof (l == null ? void 0 : l.value) == "string" ? l.value : "").trim();
+    if (!W(d)) {
+      r.style.display = "none", o(null), t.pause(), delete t.dataset.previewUrl, t.removeAttribute("src"), t.load();
       return;
     }
-    r.style.display = "block", e.dataset.previewUrl !== d && (n(null), e.dataset.previewUrl = d, e.src = d, e.load()), e.play().catch(() => {
-    }), _(t, o);
+    r.style.display = "block", t.dataset.previewUrl !== d && (o(null), t.dataset.previewUrl = d, t.src = d, t.load()), t.play().catch(() => {
+    }), y(e, i);
   }, c = () => {
-    i.disconnect(), e.pause(), delete e.dataset.previewUrl, e.removeAttribute("src"), e.load();
-  }, a = w(t), u = a == null ? void 0 : a.callback;
-  a && (a.callback = function(...l) {
-    const g = u == null ? void 0 : u.apply(this, l);
-    return s(), g;
+    n.disconnect(), t.pause(), delete t.dataset.previewUrl, t.removeAttribute("src"), t.load();
+  }, s = _(e), p = s == null ? void 0 : s.callback;
+  s && (s.callback = function(...l) {
+    const E = p == null ? void 0 : p.apply(this, l);
+    return a(), E;
   });
-  const p = t.onRemoved;
-  t.onRemoved = function(...l) {
-    return c(), p == null ? void 0 : p.apply(this, l);
-  }, t.__loadVideoUrlPreviewState = {
-    sync: s,
+  const u = e.onRemoved;
+  e.onRemoved = function(...l) {
+    return c(), u == null ? void 0 : u.apply(this, l);
+  }, e.__loadVideoUrlPreviewState = {
+    sync: a,
     cleanup: c
-  }, s();
+  }, a();
 }
-E.registerExtension({
-  name: O,
-  settings: [
-    {
-      id: L,
-      name: "Job Event Emitter Events URL",
-      type: "text",
-      defaultValue: "",
-      category: h,
-      tooltip: "Syncs into Job Event Emitter nodes. Leave blank to use IMAGEGEN_EVENTS_URL.",
-      onChange() {
-        v();
-      }
-    },
-    {
-      id: M,
-      name: "Job Event Emitter Event Token",
-      type: "text",
-      defaultValue: "",
-      category: h,
-      tooltip: "Syncs into Job Event Emitter nodes. Leave blank to use IMAGEGEN_EVENT_TOKEN.",
-      onChange() {
-        v();
-      }
-    }
-  ],
-  async setup() {
-    v();
-  },
-  beforeRegisterNodeDef(t, r) {
-    if (r.name === A) {
-      const e = t.prototype.onNodeCreated;
-      t.prototype.onNodeCreated = function(...n) {
-        const i = e == null ? void 0 : e.apply(this, n);
-        return R(this), i;
+m.registerExtension({
+  name: T,
+  beforeRegisterNodeDef(e, r) {
+    if (r.name === x) {
+      const t = e.prototype.onNodeCreated;
+      e.prototype.onNodeCreated = function(...o) {
+        const n = t == null ? void 0 : t.apply(this, o);
+        return w(this), n;
       };
-      const o = t.prototype.onConfigure;
-      t.prototype.onConfigure = function(...n) {
-        var s;
-        const i = o == null ? void 0 : o.apply(this, n);
-        return R(this), (s = this.__loadVideoUrlPreviewState) == null || s.sync(), i;
-      };
-    }
-    if (r.name === y) {
-      const e = t.prototype.onNodeCreated;
-      t.prototype.onNodeCreated = function(...n) {
-        const i = e == null ? void 0 : e.apply(this, n);
-        return T(this), i;
-      };
-      const o = t.prototype.onConfigure;
-      t.prototype.onConfigure = function(...n) {
-        const i = o == null ? void 0 : o.apply(this, n);
-        return T(this), i;
+      const i = e.prototype.onConfigure;
+      e.prototype.onConfigure = function(...o) {
+        var a;
+        const n = i == null ? void 0 : i.apply(this, o);
+        return w(this), (a = this.__loadVideoUrlPreviewState) == null || a.sync(), n;
       };
     }
   }
 });
-E.registerExtension({
-  name: D,
+m.registerExtension({
+  name: z,
   async setup() {
-    N || (S.addEventListener(W, K), N = !0);
+    g || (I.addEventListener(N, S), g = !0);
   }
 });

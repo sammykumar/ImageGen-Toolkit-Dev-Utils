@@ -2,15 +2,11 @@
 ImageGen Toolkit — Job Event Emitter node.
 
 Accepts a finished video output and POSTs a ``job_completed`` event to the
-configured app webhook (``IMAGEGEN_EVENTS_URL`` / ``IMAGEGEN_EVENT_TOKEN``).
+configured app webhook using the node's explicit ``events_url`` and
+``event_token`` inputs.
 
 On failure the node logs a warning and passes the video through unchanged so the
-workflow does not hard-fail. The caller is responsible for configuring the two
-environment variables:
-
-    IMAGEGEN_EVENTS_URL   — full URL of the POST endpoint, e.g.
-                             https://my-app.vercel.app/api/comfyui/events
-    IMAGEGEN_EVENT_TOKEN  — Bearer token matching COMFYUI_EVENT_TOKEN on the app
+workflow does not hard-fail.
 
 When ComfyUI exposes execution metadata through hidden inputs, the node includes
 the real execution ``prompt_id`` as ``comfyui_run_id``. It never uses the graph
@@ -22,20 +18,13 @@ from __future__ import annotations
 import datetime
 import json
 import logging
-import os
 from typing import Any
 from urllib.error import URLError
 from urllib.request import Request, urlopen
 
 logger = logging.getLogger(__name__)
 
-_ENV_EVENTS_URL = "IMAGEGEN_EVENTS_URL"
-_ENV_EVENT_TOKEN = "IMAGEGEN_EVENT_TOKEN"
 _POST_TIMEOUT_SECONDS = 15
-
-
-def _resolve_env(name: str) -> str | None:
-    return os.environ.get(name, "").strip() or None
 
 
 def _resolve_setting_value(value: Any) -> str | None:
@@ -52,19 +41,15 @@ def _post_event(
     event_token: str | None = None,
 ) -> None:
     """POST ``payload`` as JSON to the configured events endpoint."""
-    events_url = _resolve_setting_value(events_url) or _resolve_env(_ENV_EVENTS_URL)
-    event_token = _resolve_setting_value(event_token) or _resolve_env(_ENV_EVENT_TOKEN)
+    events_url = _resolve_setting_value(events_url)
+    event_token = _resolve_setting_value(event_token)
 
     if not events_url:
-        logger.warning(
-            "[job_event_emitter] %s is not set — skipping event post", _ENV_EVENTS_URL
-        )
+        logger.warning("[job_event_emitter] events_url is blank — skipping event post")
         return
 
     if not event_token:
-        logger.warning(
-            "[job_event_emitter] %s is not set — skipping event post", _ENV_EVENT_TOKEN
-        )
+        logger.warning("[job_event_emitter] event_token is blank — skipping event post")
         return
 
     body = json.dumps(payload).encode("utf-8")
@@ -177,7 +162,7 @@ class JobEventEmitterNode:
                     {
                         "default": "",
                         "multiline": False,
-                        "placeholder": "events webhook URL (optional)",
+                        "placeholder": "events webhook URL",
                     },
                 ),
                 "event_token": (
@@ -185,7 +170,7 @@ class JobEventEmitterNode:
                     {
                         "default": "",
                         "multiline": False,
-                        "placeholder": "events bearer token (optional)",
+                        "placeholder": "events bearer token",
                     },
                 ),
             },
