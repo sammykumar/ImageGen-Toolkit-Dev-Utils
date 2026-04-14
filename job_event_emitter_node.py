@@ -19,12 +19,13 @@ import datetime
 import json
 import logging
 from typing import Any
-from urllib.error import URLError
+from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
 logger = logging.getLogger(__name__)
 
 _POST_TIMEOUT_SECONDS = 15
+_RESPONSE_SNIPPET_LIMIT = 300
 
 
 def _resolve_setting_value(value: Any) -> str | None:
@@ -33,6 +34,47 @@ def _resolve_setting_value(value: Any) -> str | None:
 
     trimmed = value.strip()
     return trimmed or None
+
+
+def _utc_timestamp_z() -> str:
+    return (
+        datetime.datetime.now(datetime.timezone.utc)
+        .isoformat(timespec="milliseconds")
+        .replace("+00:00", "Z")
+    )
+
+
+def _read_text_snippet(value: bytes | str | None, limit: int = _RESPONSE_SNIPPET_LIMIT) -> str | None:
+    if value is None:
+        return None
+
+    if isinstance(value, bytes):
+        text = value.decode("utf-8", errors="replace")
+    else:
+        text = value
+
+    trimmed = text.strip()
+    if not trimmed:
+        return None
+
+    return trimmed[:limit]
+
+
+def _payload_summary(payload: dict[str, Any]) -> dict[str, str]:
+    summary: dict[str, str] = {}
+    for source_key, target_key in (
+        ("event_type", "event_type"),
+        ("job_id", "job_id"),
+        ("comfyui_run_id", "comfyui_run_id"),
+        ("output_url", "output_url"),
+    ):
+        value = payload.get(source_key)
+        if isinstance(value, str):
+            trimmed = value.strip()
+            if trimmed:
+                summary[target_key] = trimmed
+
+    return summary
 
 
 def _post_event(
@@ -66,16 +108,34 @@ def _post_event(
     try:
         with urlopen(req, timeout=_POST_TIMEOUT_SECONDS) as resp:
             status = resp.status
+            response_snippet = _read_text_snippet(resp.read())
             if status >= 400:
                 logger.warning(
-                    "[job_event_emitter] Events endpoint returned HTTP %d", status
+                    "[job_event_emitter] Events endpoint returned HTTP %d payload=%s response=%s",
+                    status,
+                    _payload_summary(payload),
+                    response_snippet,
                 )
             else:
                 logger.info(
-                    "[job_event_emitter] Event posted successfully (HTTP %d)", status
+                    "[job_event_emitter] Event posted successfully (HTTP %d) payload=%s",
+                    status,
+                    _payload_summary(payload),
                 )
+    except HTTPError as exc:
+        response_snippet = _read_text_snippet(exc.read())
+        logger.warning(
+            "[job_event_emitter] Events endpoint rejected webhook HTTP %d payload=%s response=%s",
+            exc.code,
+            _payload_summary(payload),
+            response_snippet,
+        )
     except URLError as exc:
-        logger.warning("[job_event_emitter] Failed to post event: %s", exc)
+        logger.warning(
+            "[job_event_emitter] Failed to post event payload=%s error=%s",
+            _payload_summary(payload),
+            exc,
+        )
 
 
 def _extract_output_filename(video: Any) -> str | None:
@@ -201,7 +261,7 @@ class JobEventEmitterNode:
         payload: dict[str, Any] = {
             "event_type": "job_completed",
             "job_id": effective_job_id,
-            "timestamp": datetime.datetime.now(datetime.timezone.utc).isoformat(),
+            "timestamp": _utc_timestamp_z(),
         }
 
         # unique_id is the graph node id, not the execution prompt_id.
