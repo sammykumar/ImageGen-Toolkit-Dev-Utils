@@ -265,6 +265,45 @@ class JobEventFinishedNode:
                         "placeholder": "events bearer token",
                     },
                 ),
+                "negative_prompt": (
+                    "STRING",
+                    {
+                        "default": "",
+                        "multiline": True,
+                        "placeholder": "negative prompt",
+                    },
+                ),
+                "guidance_scale": (
+                    "FLOAT",
+                    {
+                        "default": 0.0,
+                        "min": 0.0,
+                        "step": 0.1,
+                    },
+                ),
+                "steps": (
+                    "INT",
+                    {
+                        "default": 0,
+                        "min": 0,
+                        "step": 1,
+                    },
+                ),
+                "sampler": (
+                    "STRING",
+                    {
+                        "default": "",
+                        "multiline": False,
+                        "placeholder": "sampler",
+                    },
+                ),
+                "seed": (
+                    "INT",
+                    {
+                        "default": 0,
+                        "step": 1,
+                    },
+                ),
             },
             "hidden": {
                 "prompt": "PROMPT",
@@ -277,11 +316,18 @@ class JobEventFinishedNode:
         video: Any,
         events_url: str = "",
         event_token: str = "",
+        negative_prompt: str = "",
+        guidance_scale: float = 0.0,
+        steps: int = 0,
+        sampler: str = "",
+        seed: int = 0,
         prompt: Any = None,
     ) -> tuple[Any]:
         comfyui_run_id = _extract_prompt_id(prompt)
         effective_job_id = _resolve_setting_value(job_id)
         output_filename, output_metadata = _extract_output_metadata(video)
+        effective_negative_prompt = _resolve_setting_value(negative_prompt)
+        effective_sampler = _resolve_setting_value(sampler)
 
         payload: dict[str, Any] = {
             "event_type": "job_completed",
@@ -299,6 +345,21 @@ class JobEventFinishedNode:
 
         if output_metadata is not None:
             payload["output"] = output_metadata
+
+        if effective_negative_prompt:
+            payload["negative_prompt"] = effective_negative_prompt
+
+        if isinstance(guidance_scale, (int, float)) and float(guidance_scale) != 0.0:
+            payload["guidance_scale"] = float(guidance_scale)
+
+        if isinstance(steps, int) and steps > 0:
+            payload["steps"] = steps
+
+        if effective_sampler:
+            payload["sampler"] = effective_sampler
+
+        if isinstance(seed, int) and seed != 0:
+            payload["seed"] = seed
 
         logger.info(
             "[job_event_emitter] Prepared completion payload completeness=%s payload=%s",

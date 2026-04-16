@@ -18,6 +18,16 @@ module = importlib.import_module("job_event_emitter_node")
 
 
 class JobEventEmitterNodeTests(unittest.TestCase):
+    def test_input_types_expose_comfy_workflow_params(self):
+        inputs = module.JobEventFinishedNode.INPUT_TYPES()
+        required = inputs["required"]
+
+        self.assertIn("negative_prompt", required)
+        self.assertIn("guidance_scale", required)
+        self.assertIn("steps", required)
+        self.assertIn("sampler", required)
+        self.assertIn("seed", required)
+
     def test_emit_and_passthrough_preserves_structured_output_metadata(self):
         node = module.JobEventFinishedNode()
         video = {
@@ -34,6 +44,11 @@ class JobEventEmitterNodeTests(unittest.TestCase):
                 video=video,
                 events_url="https://example.com/events",
                 event_token="secret-token",
+                negative_prompt="blurry, low quality",
+                guidance_scale=7.5,
+                steps=28,
+                sampler="dpmpp_2m",
+                seed=123456,
                 prompt={"prompt_id": "prompt-id"},
             )
 
@@ -50,6 +65,11 @@ class JobEventEmitterNodeTests(unittest.TestCase):
                     "subfolder": "testing/video/LTX_2.3",
                     "type": "output",
                 },
+                "negative_prompt": "blurry, low quality",
+                "guidance_scale": 7.5,
+                "steps": 28,
+                "sampler": "dpmpp_2m",
+                "seed": 123456,
             },
             events_url="https://example.com/events",
             event_token="secret-token",
