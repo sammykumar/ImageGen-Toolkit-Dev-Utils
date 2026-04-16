@@ -27,6 +27,8 @@ class JobEventEmitterNodeTests(unittest.TestCase):
         self.assertIn("steps", required)
         self.assertIn("sampler", required)
         self.assertIn("seed", required)
+        self.assertNotIn("control_after_generate", required)
+        self.assertEqual(required["sampler"], ("SAMPLER",))
 
     def test_emit_and_passthrough_preserves_structured_output_metadata(self):
         node = module.JobEventFinishedNode()
@@ -103,6 +105,33 @@ class JobEventEmitterNodeTests(unittest.TestCase):
             event_token="secret-token",
         )
         self.assertTrue(any("completeness=filename_only" in entry for entry in logs.output))
+
+    def test_emit_and_passthrough_normalizes_sampler_typed_values_to_plain_string(self):
+        node = module.JobEventFinishedNode()
+
+        with mock.patch.object(module, "_utc_timestamp_z", return_value="2026-04-14T01:02:03.000Z"), mock.patch.object(
+            module, "_post_event"
+        ) as post_event_mock:
+            node.emit_and_passthrough(
+                job_id="durable-id",
+                video=None,
+                events_url="https://example.com/events",
+                event_token="secret-token",
+                sampler={"sampler_name": " dpmpp_2m "},
+                prompt={"prompt_id": "prompt-id"},
+            )
+
+        post_event_mock.assert_called_once_with(
+            {
+                "event_type": "job_completed",
+                "timestamp": "2026-04-14T01:02:03.000Z",
+                "job_id": "durable-id",
+                "comfyui_run_id": "prompt-id",
+                "sampler": "dpmpp_2m",
+            },
+            events_url="https://example.com/events",
+            event_token="secret-token",
+        )
 
     def test_emit_and_passthrough_logs_none_when_output_metadata_missing(self):
         node = module.JobEventFinishedNode()

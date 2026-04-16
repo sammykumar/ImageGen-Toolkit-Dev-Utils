@@ -130,6 +130,26 @@ def _extract_output_filename(video: Any) -> str | None:
     return filename
 
 
+def _normalize_sampler_value(value: Any) -> str | None:
+    if isinstance(value, str):
+        return _resolve_setting_value(value)
+
+    if isinstance(value, dict):
+        for key in ("sampler_name", "name", "label", "value", "sampler"):
+            candidate = _normalize_sampler_value(value.get(key))
+            if candidate:
+                return candidate
+        return None
+
+    if isinstance(value, (list, tuple)):
+        for item in value:
+            candidate = _normalize_sampler_value(item)
+            if candidate:
+                return candidate
+
+    return None
+
+
 def _payload_completeness(output_filename: str | None, output_metadata: dict[str, str] | None) -> str:
     if output_metadata is not None:
         return "structured"
@@ -289,14 +309,7 @@ class JobEventFinishedNode:
                         "step": 1,
                     },
                 ),
-                "sampler": (
-                    "STRING",
-                    {
-                        "default": "",
-                        "multiline": False,
-                        "placeholder": "sampler",
-                    },
-                ),
+                "sampler": ("SAMPLER",),
                 "seed": (
                     "INT",
                     {
@@ -319,7 +332,7 @@ class JobEventFinishedNode:
         negative_prompt: str = "",
         guidance_scale: float = 0.0,
         steps: int = 0,
-        sampler: str = "",
+        sampler: Any = "",
         seed: int = 0,
         prompt: Any = None,
     ) -> tuple[Any]:
@@ -327,7 +340,7 @@ class JobEventFinishedNode:
         effective_job_id = _resolve_setting_value(job_id)
         output_filename, output_metadata = _extract_output_metadata(video)
         effective_negative_prompt = _resolve_setting_value(negative_prompt)
-        effective_sampler = _resolve_setting_value(sampler)
+        effective_sampler = _normalize_sampler_value(sampler)
 
         payload: dict[str, Any] = {
             "event_type": "job_completed",
