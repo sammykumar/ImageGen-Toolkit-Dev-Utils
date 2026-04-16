@@ -21,6 +21,44 @@ _POST_TIMEOUT_SECONDS = 15
 _RESPONSE_SNIPPET_LIMIT = 300
 
 
+def _safe_stringify(value: Any) -> str | None:
+    try:
+        return _read_text_snippet(str(value))
+    except Exception:
+        return None
+
+
+def _safe_repr(value: Any) -> str | None:
+    try:
+        return _read_text_snippet(repr(value))
+    except Exception:
+        return None
+
+
+def _sampler_debug_keys(value: Any) -> list[str] | None:
+    if isinstance(value, dict):
+        return sorted(str(key) for key in value.keys())[:10]
+
+    value_dict = getattr(value, "__dict__", None)
+    if isinstance(value_dict, dict):
+        return sorted(str(key) for key in value_dict.keys() if not str(key).startswith("_"))[:10] or None
+
+    return None
+
+
+def _sampler_debug_summary(raw_value: Any, normalized_value: str | None) -> dict[str, Any]:
+    value_type = type(raw_value)
+    return {
+        "event": "job_event_emitter_sampler_debug",
+        "input_type": value_type.__name__,
+        "input_module": value_type.__module__,
+        "input_keys": _sampler_debug_keys(raw_value),
+        "input_repr": _safe_repr(raw_value),
+        "input_string": _safe_stringify(raw_value),
+        "normalized_sampler": normalized_value,
+    }
+
+
 def _resolve_setting_value(value: Any) -> str | None:
     if not isinstance(value, str):
         return None
@@ -250,7 +288,7 @@ def _extract_prompt_id(prompt: Any) -> str | None:
 
 
 class JobEventFinishedNode:
-    CATEGORY = "ImageGen Toolkit"
+    CATEGORY = "ImageGen Toolkit Dev Utils/Events"
     FUNCTION = "emit_and_passthrough"
     RETURN_TYPES = ("VHS_FILENAMES",)
     RETURN_NAMES = ("video",)
@@ -341,6 +379,11 @@ class JobEventFinishedNode:
         output_filename, output_metadata = _extract_output_metadata(video)
         effective_negative_prompt = _resolve_setting_value(negative_prompt)
         effective_sampler = _normalize_sampler_value(sampler)
+
+        logger.info(
+            "[job_event_emitter] Sampler debug summary=%s",
+            _sampler_debug_summary(sampler, effective_sampler),
+        )
 
         payload: dict[str, Any] = {
             "event_type": "job_completed",

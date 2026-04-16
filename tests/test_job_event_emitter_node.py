@@ -111,7 +111,7 @@ class JobEventEmitterNodeTests(unittest.TestCase):
 
         with mock.patch.object(module, "_utc_timestamp_z", return_value="2026-04-14T01:02:03.000Z"), mock.patch.object(
             module, "_post_event"
-        ) as post_event_mock:
+        ) as post_event_mock, self.assertLogs(module.logger, level="INFO") as logs:
             node.emit_and_passthrough(
                 job_id="durable-id",
                 video=None,
@@ -132,6 +132,9 @@ class JobEventEmitterNodeTests(unittest.TestCase):
             events_url="https://example.com/events",
             event_token="secret-token",
         )
+        self.assertTrue(any("Sampler debug summary=" in entry for entry in logs.output))
+        self.assertTrue(any("normalized_sampler': 'dpmpp_2m'" in entry for entry in logs.output))
+        self.assertTrue(any("input_keys': ['sampler_name']" in entry for entry in logs.output))
 
     def test_emit_and_passthrough_logs_none_when_output_metadata_missing(self):
         node = module.JobEventFinishedNode()
