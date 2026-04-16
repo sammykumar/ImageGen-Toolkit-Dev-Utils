@@ -155,6 +155,8 @@ class JobEventEmitterNodeTests(unittest.TestCase):
         )
         self.assertTrue(any("Sampler debug summary=" in entry for entry in logs.output))
         self.assertTrue(any("normalized_sampler': 'dpmpp_2m'" in entry for entry in logs.output))
+        self.assertTrue(any("sampler_class_name': 'dict'" in entry for entry in logs.output))
+        self.assertTrue(any("sampler_function_name': None" in entry for entry in logs.output))
         self.assertTrue(any("input_keys': ['sampler_name']" in entry for entry in logs.output))
 
     def test_emit_and_passthrough_recovers_sampler_label_from_ksampler_object(self):
@@ -189,6 +191,8 @@ class JobEventEmitterNodeTests(unittest.TestCase):
             event_token="secret-token",
         )
         self.assertTrue(any("normalized_sampler': 'euler_ancestral_cfg_pp'" in entry for entry in logs.output))
+        self.assertTrue(any("sampler_class_name': 'SimpleNamespace'" in entry for entry in logs.output))
+        self.assertTrue(any("sampler_function_name': 'sample_euler_ancestral_cfg_pp'" in entry for entry in logs.output))
 
     def test_emit_and_passthrough_logs_none_when_output_metadata_missing(self):
         node = module.JobEventFinishedNode()

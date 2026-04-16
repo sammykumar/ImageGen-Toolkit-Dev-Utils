@@ -46,12 +46,27 @@ def _sampler_debug_keys(value: Any) -> list[str] | None:
     return None
 
 
+def _sampler_debug_function_name(value: Any) -> str | None:
+    sampler_function = getattr(value, "sampler_function", None)
+    function_name = getattr(sampler_function, "__name__", None)
+    if isinstance(function_name, str) and function_name.strip():
+        return function_name.strip()
+
+    direct_function_name = getattr(value, "__name__", None)
+    if isinstance(direct_function_name, str) and direct_function_name.strip():
+        return direct_function_name.strip()
+
+    return None
+
+
 def _sampler_debug_summary(raw_value: Any, normalized_value: str | None) -> dict[str, Any]:
     value_type = type(raw_value)
     return {
         "event": "job_event_emitter_sampler_debug",
         "input_type": value_type.__name__,
         "input_module": value_type.__module__,
+        "sampler_class_name": value_type.__name__,
+        "sampler_function_name": _sampler_debug_function_name(raw_value),
         "input_keys": _sampler_debug_keys(raw_value),
         "input_repr": _safe_repr(raw_value),
         "input_string": _safe_stringify(raw_value),
