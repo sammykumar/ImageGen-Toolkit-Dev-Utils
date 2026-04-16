@@ -21,59 +21,6 @@ _POST_TIMEOUT_SECONDS = 15
 _RESPONSE_SNIPPET_LIMIT = 300
 
 
-def _safe_stringify(value: Any) -> str | None:
-    try:
-        return _read_text_snippet(str(value))
-    except Exception:
-        return None
-
-
-def _safe_repr(value: Any) -> str | None:
-    try:
-        return _read_text_snippet(repr(value))
-    except Exception:
-        return None
-
-
-def _sampler_debug_keys(value: Any) -> list[str] | None:
-    if isinstance(value, dict):
-        return sorted(str(key) for key in value.keys())[:10]
-
-    value_dict = getattr(value, "__dict__", None)
-    if isinstance(value_dict, dict):
-        return sorted(str(key) for key in value_dict.keys() if not str(key).startswith("_"))[:10] or None
-
-    return None
-
-
-def _sampler_debug_function_name(value: Any) -> str | None:
-    sampler_function = getattr(value, "sampler_function", None)
-    function_name = getattr(sampler_function, "__name__", None)
-    if isinstance(function_name, str) and function_name.strip():
-        return function_name.strip()
-
-    direct_function_name = getattr(value, "__name__", None)
-    if isinstance(direct_function_name, str) and direct_function_name.strip():
-        return direct_function_name.strip()
-
-    return None
-
-
-def _sampler_debug_summary(raw_value: Any, normalized_value: str | None) -> dict[str, Any]:
-    value_type = type(raw_value)
-    return {
-        "event": "job_event_emitter_sampler_debug",
-        "input_type": value_type.__name__,
-        "input_module": value_type.__module__,
-        "sampler_class_name": value_type.__name__,
-        "sampler_function_name": _sampler_debug_function_name(raw_value),
-        "input_keys": _sampler_debug_keys(raw_value),
-        "input_repr": _safe_repr(raw_value),
-        "input_string": _safe_stringify(raw_value),
-        "normalized_sampler": normalized_value,
-    }
-
-
 def _resolve_setting_value(value: Any) -> str | None:
     if not isinstance(value, str):
         return None
@@ -274,6 +221,23 @@ def _payload_summary(payload: dict[str, Any]) -> dict[str, str]:
     return summary
 
 
+def _completion_metadata_preview(payload: dict[str, Any]) -> dict[str, Any]:
+    preview: dict[str, Any] = {}
+    for key in (
+        "output_url",
+        "output",
+        "negative_prompt",
+        "guidance_scale",
+        "steps",
+        "sampler",
+        "seed",
+    ):
+        if key in payload:
+            preview[key] = payload[key]
+
+    return preview
+
+
 def _post_event(
     payload: dict[str, Any],
     events_url: str | None = None,
@@ -440,11 +404,6 @@ class JobEventFinishedNode:
         effective_negative_prompt = _resolve_setting_value(negative_prompt)
         effective_sampler = _normalize_sampler_value(sampler)
 
-        logger.info(
-            "[job_event_emitter] Sampler debug summary=%s",
-            _sampler_debug_summary(sampler, effective_sampler),
-        )
-
         payload: dict[str, Any] = {
             "event_type": "job_completed",
             "timestamp": _utc_timestamp_z(),
@@ -476,6 +435,11 @@ class JobEventFinishedNode:
 
         if isinstance(seed, int) and seed != 0:
             payload["seed"] = seed
+
+        logger.info(
+            "[job_event_emitter] Completion metadata preview=%s",
+            _completion_metadata_preview(payload),
+        )
 
         logger.info(
             "[job_event_emitter] Prepared completion payload completeness=%s payload=%s",
