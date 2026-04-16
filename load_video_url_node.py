@@ -317,7 +317,7 @@ class LoadVideoURL:
 
     FUNCTION = "load_video"
 
-    CATEGORY = "ImageGen Toolkit Dev Utils/video"
+    CATEGORY = "ImageGen Toolkit Dev Utils/Video"
 
     def load_video(
         self,
