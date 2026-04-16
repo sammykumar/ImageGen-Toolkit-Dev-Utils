@@ -168,9 +168,54 @@ def _extract_output_filename(video: Any) -> str | None:
     return filename
 
 
+def _normalize_sampler_name_from_function_name(name: Any) -> str | None:
+    if not isinstance(name, str):
+        return None
+
+    trimmed = name.strip()
+    if not trimmed:
+        return None
+
+    special_names = {
+        "dpm_fast_function": "dpm_fast",
+        "dpm_adaptive_function": "dpm_adaptive",
+        "sample_unipc": "uni_pc",
+        "sample_unipc_bh2": "uni_pc_bh2",
+    }
+
+    mapped_name = special_names.get(trimmed)
+    if mapped_name:
+        return mapped_name
+
+    if trimmed.startswith("sample_"):
+        return _resolve_setting_value(trimmed[len("sample_") :])
+
+    return None
+
+
+def _normalize_sampler_name_from_callable(value: Any) -> str | None:
+    function_name = getattr(value, "__name__", None)
+    return _normalize_sampler_name_from_function_name(function_name)
+
+
+def _normalize_sampler_name_from_ksampler(value: Any) -> str | None:
+    sampler_function = getattr(value, "sampler_function", None)
+    normalized_name = _normalize_sampler_name_from_callable(sampler_function)
+    if normalized_name == "euler":
+        inpaint_options = getattr(value, "inpaint_options", None)
+        if isinstance(inpaint_options, dict) and inpaint_options.get("random") is True:
+            return "ddim"
+
+    return normalized_name
+
+
 def _normalize_sampler_value(value: Any) -> str | None:
     if isinstance(value, str):
         return _resolve_setting_value(value)
+
+    normalized_ksampler_name = _normalize_sampler_name_from_ksampler(value)
+    if normalized_ksampler_name:
+        return normalized_ksampler_name
 
     if isinstance(value, dict):
         for key in ("sampler_name", "name", "label", "value", "sampler"):

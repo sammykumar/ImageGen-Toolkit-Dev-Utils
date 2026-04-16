@@ -18,6 +18,27 @@ module = importlib.import_module("job_event_emitter_node")
 
 
 class JobEventEmitterNodeTests(unittest.TestCase):
+    def test_normalize_sampler_value_recovers_ksampler_function_name(self):
+        sampler = types.SimpleNamespace(
+            sampler_function=types.SimpleNamespace(__name__="sample_euler_ancestral_cfg_pp"),
+            extra_options={},
+            inpaint_options={},
+        )
+
+        self.assertEqual(
+            module._normalize_sampler_value(sampler),
+            "euler_ancestral_cfg_pp",
+        )
+
+    def test_normalize_sampler_value_recovers_ddim_from_randomized_euler_ksampler(self):
+        sampler = types.SimpleNamespace(
+            sampler_function=types.SimpleNamespace(__name__="sample_euler"),
+            extra_options={},
+            inpaint_options={"random": True},
+        )
+
+        self.assertEqual(module._normalize_sampler_value(sampler), "ddim")
+
     def test_input_types_expose_comfy_workflow_params(self):
         inputs = module.JobEventFinishedNode.INPUT_TYPES()
         required = inputs["required"]
@@ -135,6 +156,39 @@ class JobEventEmitterNodeTests(unittest.TestCase):
         self.assertTrue(any("Sampler debug summary=" in entry for entry in logs.output))
         self.assertTrue(any("normalized_sampler': 'dpmpp_2m'" in entry for entry in logs.output))
         self.assertTrue(any("input_keys': ['sampler_name']" in entry for entry in logs.output))
+
+    def test_emit_and_passthrough_recovers_sampler_label_from_ksampler_object(self):
+        node = module.JobEventFinishedNode()
+        sampler = types.SimpleNamespace(
+            sampler_function=types.SimpleNamespace(__name__="sample_euler_ancestral_cfg_pp"),
+            extra_options={},
+            inpaint_options={},
+        )
+
+        with mock.patch.object(module, "_utc_timestamp_z", return_value="2026-04-14T01:02:03.000Z"), mock.patch.object(
+            module, "_post_event"
+        ) as post_event_mock, self.assertLogs(module.logger, level="INFO") as logs:
+            node.emit_and_passthrough(
+                job_id="durable-id",
+                video=None,
+                events_url="https://example.com/events",
+                event_token="secret-token",
+                sampler=sampler,
+                prompt={"prompt_id": "prompt-id"},
+            )
+
+        post_event_mock.assert_called_once_with(
+            {
+                "event_type": "job_completed",
+                "timestamp": "2026-04-14T01:02:03.000Z",
+                "job_id": "durable-id",
+                "comfyui_run_id": "prompt-id",
+                "sampler": "euler_ancestral_cfg_pp",
+            },
+            events_url="https://example.com/events",
+            event_token="secret-token",
+        )
+        self.assertTrue(any("normalized_sampler': 'euler_ancestral_cfg_pp'" in entry for entry in logs.output))
 
     def test_emit_and_passthrough_logs_none_when_output_metadata_missing(self):
         node = module.JobEventFinishedNode()
